@@ -8,9 +8,11 @@
 #include <sys/mman.h>
 #include <sys/wait.h>
 
-void processFile(int K, int fileIndex, char *fileName, int *word_array)
+#define STRING_SIZE 64
+
+void processFile(int K, int fileIndex, char *fileName, int *word_array_count, char *word_array)
 {
-    const int MAX_WORD_SIZE = 64;
+	const int MAX_WORD_SIZE = 64;
 
 	FILE *in_file = fopen(fileName, "r");		// read only
 
@@ -42,14 +44,17 @@ void processFile(int K, int fileIndex, char *fileName, int *word_array)
 	while (fscanf(in_file, "%s", word) == 1)		// &word ya da word emin deiglim
 	{
 		// Convert the word to upper case
-		for (int i=0; i<MAX_WORD_SIZE; ++i) {
+		for (int i=0; i<MAX_WORD_SIZE; ++i)
+		{
 			word[i] = toupper(word[i]);
 		}
 
 		// Check if the word already exists in the unique words array
 		bool isFound = false;
-		for (int i=0; i<noOfWords; ++i) {
-			if (strcmp(words[i], word) == 0) {
+		for (int i=0; i<noOfWords; ++i)
+		{
+			if (strcmp(words[i], word) == 0)
+			{
 				// If the word already exists, increment its count
 				++wordCounts[i];
 				isFound = true;
@@ -90,55 +95,137 @@ void processFile(int K, int fileIndex, char *fileName, int *word_array)
 	int index = fileIndex * K;
 	for (int i=0; i<K; ++i)
 	{
-	    word_array[i+index] = wordCounts[i];
-		printf("%s %d%d\n", words[i], wordCounts[i], fileIndex);
+		word_array_count[i+index] = wordCounts[i];
+		strcpy(word_array + (i+index)*STRING_SIZE, words[i]);
+		printf("%s %d\n", words[i], wordCounts[i]);
 	}
-
 
 }
 
-//int main(int argc, int *argv[])
-int main()
+int main(int argc, int *argv[])
 {
-	/*	argv[0] = ./proctopk
-	 *	argv[1] = <K>
-	 *	argv[2] = <output_file>
-	 *	argv[3] = <input_file>
+	/*	argv[0]  = ./proctopk
+	 *	argv[1]  = <K>
+	 *	argv[2]  = <output_file>
+	 *	argv[3]  = <N>
+	 *	argv[4+] = <input_file>
 	 */
-	 const int MAX_WORD_SIZE = 64;
-
-	int K = 5;						// <K>
-	//FILE *out_file = fopen(argv[2], "w");		// write only
+	
+	const int MAX_WORD_SIZE = 64;
+	int K = atoi(argv[1]);				// <K>
+	int N = atoi(argv[3]);				// <N>
+	FILE *out_file = fopen(argv[2], "w");		// write only
 	//FILE *in_file = fopen(argv[2], "r");		// read only
+	
+	int array_size = K;
 
-	 int array_size = K;
-	 
-	 int N = 2;
-
-	 int *word_array = mmap(NULL, N * array_size * sizeof(int), PROT_READ | PROT_WRITE, MAP_SHARED | MAP_ANONYMOUS, -1, 0);
+	int *word_array_count = mmap(NULL, N * array_size * sizeof(int), PROT_READ | PROT_WRITE, MAP_SHARED | MAP_ANONYMOUS, -1, 0); 
+	char *word_array = mmap(NULL, N * array_size * MAX_WORD_SIZE * sizeof(char), PROT_READ | PROT_WRITE, MAP_SHARED | MAP_ANONYMOUS, -1, 0);
+    	
+	if (word_array == MAP_FAILED)
+	{
+    		perror("mmap");
+        	exit(1);
+    	}
 
 	// initialize the shared array
-    for (int i = 0; i < array_size*2; i++) {
-        word_array[i] = 0;
-    }
-	for (int i = 0; i < N; i++) {
-        pid_t pid = fork();
-        if (pid == -1) {
-            perror("fork");
-            exit(EXIT_FAILURE);
-        } else if (pid == 0) {
-
-            processFile(K, i, "deneme.c", word_array);
+	for (int i = 0; i < array_size*N; i++)
+	{
+        	word_array_count[i] = 0;
+	}
+	
+	for (int i = 0; i < N; i++)
+	{
+		pid_t pid = fork();
 		
-	    printf("deneme.c");
-            exit(1);
-        }
-        else {
-        	wait(0);
-        }
-        
-    }
+		if (pid == -1) {
+			perror("fork");
+			exit(EXIT_FAILURE);
+		}
+		else if (pid == 0)
+		{
+			FILE *in_file = fopen(argv[ i+4 ], "r");	// read only
+			processFile(K, i, argv[ i+4 ], word_array_count, word_array);
+			printf("\n\nayshem benim\n\n");
+			exit(1);
+		}
+		else
+		{
+			wait(0);
+		}
+		
+	}
     
+	int total_word = 0;
+	char all_words[ N*K ][ MAX_WORD_SIZE ];
+	int word_counts[N*K];
+	char current_word[ MAX_WORD_SIZE ];
+
+	// duplicate elimination
+	for(int i=0; i<N; i++) //  0 1
+	{
+		//int offset = 0;
+		for(int j=0; j<K; j++) // 0 1 2
+		{
+			//current_word = word_array + offset;
+			//offset += strlen(word_array + offset) + 1;
+			strcpy(current_word, word_array+(i*K+j)*STRING_SIZE);
+			printf("%s%d", current_word, 5);
+
+			if(current_word == "") //veya NULL konulabilir
+			{
+				break;
+			}
+
+			bool isRepeated = false;
+			for(int k=0; k<total_word; k++)
+			{
+				if(current_word == all_words[k]) // strcmp
+				{
+					word_counts[k] += word_array_count[i*K+j];
+					isRepeated = true;
+				}
+			}
+
+			if(!isRepeated)
+			{
+				strcpy(all_words[total_word], current_word);
+				printf("%s ", all_words[total_word]);
+				word_counts[total_word] = word_array_count[i*K+j];
+				total_word++;
+			}
+		}
+	}  
+
+	// Sorting in descending order
+	for (int i=0; i<total_word - 1; ++i)
+	{
+		for (int j=i + 1; j<total_word; ++j)
+		{
+			int azResult = strcmp(all_words[j], all_words[i]);
+			if ( (word_counts[j] > word_counts[i]) || ((word_counts[j] == word_counts[i]) && (azResult < 0)))
+			{
+				int temp_count = word_counts[i];
+				word_counts[i] = word_counts[j];
+				word_counts[j] = temp_count;
+
+				char temp_word[ MAX_WORD_SIZE ];
+				strcpy(temp_word, all_words[i]);
+				strcpy(all_words[i], all_words[j]);
+				strcpy(all_words[j], temp_word);
+			}
+		}
+	} 
+    
+	// write the first K to the outfile
+	for(int i=0; i<K; i++)
+	{	
+		if(word_array_count[i] != 0)
+		{
+			fprintf(out_file, "%s %d\n", all_words[i], word_counts[i]);
+			//fprintf(out_file, "%s %d\n", word_array+i*STRING_SIZE, 		word_counts[i]);
+		}
+	}
 
 	return 0;
 }
