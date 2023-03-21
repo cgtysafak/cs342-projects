@@ -16,12 +16,11 @@
 #include <pthread.h>
 
 #define MAX_WORD_SIZE 64
-#define MAX_WORDS 1000
-#define MAX_FILES 100
+#define MAX_FILES 10
 #define MAX_FILENAME 256
 
 char filenames[ MAX_FILES ][ MAX_FILENAME ];
-int capacity = 500;	// init
+int capacity = 1000;	// init
 char **words;
 int *counts;
 int num_words = 0;

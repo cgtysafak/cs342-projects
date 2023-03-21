@@ -1,8 +1,8 @@
-/* CS 342 Project 1
+/*	CS 342 Project 1
 	Part A
-   
-   Cagatay Safak - 21902730
-   Ayse Kelleci - 21902532
+
+	Cagatay Safak - 21902730
+	Ayse Kelleci - 21902532
 */
 
 #include <stdio.h>
