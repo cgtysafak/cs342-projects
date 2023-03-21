@@ -1,4 +1,5 @@
 /* CS 342 Project 1
+	Part A
    
    Cagatay Safak - 21902730
    Ayse Kelleci - 21902532
@@ -195,7 +196,7 @@ void processFile(int K, int fileIndex, char *fileName, int *word_array_count, ch
 	// Read words from file and add them to dynamic arrays
 	char word[ MAX_WORD_SIZE ];
 
-	while (fscanf(in_file, "%s", word) == 1)		// &word ya da word emin deiglim + belki fscanf() yerine fgets()
+	while (fscanf(in_file, " %64s", word) == 1)		// &word ya da word emin deiglim + belki fscanf() yerine fgets()
 	{
 		// Convert the word to upper case
 		for (int i=0; i<MAX_WORD_SIZE; ++i)
@@ -236,7 +237,8 @@ void processFile(int K, int fileIndex, char *fileName, int *word_array_count, ch
 			// wordCounts[noOfWords] = 1;
 
 			strcpy(words[noOfWords], word);
-			++wordCounts[noOfWords++];
+			++wordCounts[noOfWords];
+			noOfWords++;
 		}
 	}
 
