@@ -4,6 +4,16 @@
 #include <string.h>
 #include <unistd.h>
 
+struct BurstNode {
+    int pid;
+    int burst_length;
+    int arrival_time;
+    int remaining_time;
+    int finish_time;
+    int turnaround_time;
+    int processor_id;
+    struct BurstNode* next;
+};
 int main(int argc, char *argv[])
 {
 	int n = 2;					// default value for -n
