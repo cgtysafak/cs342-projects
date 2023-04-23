@@ -6,63 +6,93 @@
 
 int main(int argc, char *argv[])
 {
-    int num_procs = 2;
-    char sched_approach = 'M';
-    char queue_sel = 'R';
-    char sched_alg = 'R';
-    int time_quantum = 20;
-    char *infile = "in.txt";
-    int out_mode = 1;
-    char *outfile = "out.txt";
-    int random = 0;
-    int t = 0, t1 = 0, t2 = 0, l = 0, l1 = 0, l2 = 0;
-    int opt;
+	int n = 2;					// default value for -n
+	char* sap = "M";			// default value for -a
+	char* qs = "RM";			// default value for -a (multi-queue)
+	char* alg = "RR";			// default value for -s
+	int q = 20;					// default value for -s (RR quantum)
+	char* infile = "in.txt";	// default value for -i
+	int outmode = 1;			// default value for -m
+	char* outfile = NULL;		// default value for -o
+	// int t = 0, t1 = 0, t2 = 0, l = 0, l1 = 0, l2 = 0, pc = 0;	// default value for -r
 
-    while ((opt = getopt(argc, argv, "n:a:s:i:m:o:r:")) != -1) {
-        switch (opt) {
-            case 'n':
-                num_procs = atoi(optarg);
-                break;
-            case 'a':
-                sched_approach = optarg[0];
-                queue_sel = optarg[1];
-                break;
-            case 's':
-                sched_alg = optarg[0];
-                time_quantum = atoi(optarg + 1);
-                break;
-            case 'i':
-                infile = optarg;
-                break;
-            case 'm':
-                out_mode = atoi(optarg);
-                break;
-            case 'o':
-                outfile = optarg;
-                break;
-            case 'r':
-                random = 1;
-                sscanf(optarg, "%d %d %d %d %d %d", &t, &t1, &t2, &l, &l1, &l2);
-                break;
-            default:
-                fprintf(stderr, "Usage: %s [-n N] [-a SAP QS] [-s ALG Q] [-i INFILE] [-m OUTMODE] [-o OUTFILE] [-r T T1 T2 L L1 L2]\n", argv[0]);
-                exit(EXIT_FAILURE);
-        }
-    }
+	int opt;
 
-    printf("num_procs=%d, sched_approach=%c, queue_sel=%c, sched_alg=%c, time_quantum=%d, infile=%s, out_mode=%d, outfile=%s, random=%d, t=%d, t1=%d, t2=%d, l=%d, l1=%d, l2=%d\n",
-           num_procs, sched_approach, queue_sel, sched_alg, time_quantum, infile, out_mode, outfile, random, t, t1, t2, l, l1, l2);
+	while ((opt = getopt(argc, argv, "n:a:s:i:m:o:r:")) != -1)
+	{
+		switch (opt)
+		{
+			case 'n':
+				n = atoi(optarg);
+				break;
+			case 'a':
+				sap = optarg;
+				
+                if (strcmp(sap, "S") == 0)
+            		qs = "NA";
+                else if (strcmp(sap, "M") == 0)
+                	qs = argv[optind++];
 
-    struct timeval start_time, current_time;
-    gettimeofday(&start_time, NULL);
-    long start_ms = start_time.tv_sec * 1000 + start_time.tv_usec / 1000;
+				break;
+			case 's':
+				alg = optarg;
+                if (strcmp(alg, "RR") == 0)
+                    q = atoi(argv[optind++]);
+                else
+                    q = 0;
 
-    // Do some work here...
+				break;
+			case 'i':
+				infile = optarg;
+				break;
+			case 'm':
+				outmode = atoi(optarg);
+			case 'o':
+				outfile = optarg;
+				outmode = 0;
 
-    gettimeofday(&current_time, NULL);
-    long current_ms = current_time.tv_sec * 1000 + current_time.tv_usec / 1000;
-    long elapsed_ms = current_ms - start_ms;
-    printf("Elapsed time: %ld ms\n", elapsed_ms);
+				break;
+			default:
+				fprintf(stderr,
+				"Usage: %s [-n N] [-a SAP QS] [-s ALG Q] [-i INFILE] [-m OUTMODE] [-o OUTFILE] [-r T T1 T2 L L1 L2 PC]\n",
+				argv[0]);
+				exit(EXIT_FAILURE);
+		}
+	}
 
-    return 0;
+	if (n<2 && strcmp(alg, "RR") == 0)
+	{
+		fprintf(stderr, "Error: Number of processors must be greater than 2 to use multi-queue approach.\n");
+		exit(EXIT_FAILURE);
+	}
+	else if (outmode < 0 || outmode > 3)
+	{
+		fprintf(stderr, "Error: -o (OUTMODE) has an invalid value.\n");
+		exit(EXIT_FAILURE);
+	}
+
+	printf("n = %d\n", n);
+	printf("sap = %s\n", sap);
+	printf("qs = %s\n", qs);
+	printf("alg = %s\n", alg);
+	printf("q = %d\n", q);
+	printf("infile = %s\n", infile);
+	printf("outmode = %d\n", outmode);
+	if (outfile == NULL)
+		printf("outfile = (null)\n");
+	else
+		printf("outfile = %s\n", outfile);
+
+	struct timeval start_time, current_time;
+	gettimeofday(&start_time, NULL);
+	long start_ms = start_time.tv_sec * 1000 + start_time.tv_usec / 1000;
+
+	// Do some work here...
+
+	gettimeofday(&current_time, NULL);
+	long current_ms = current_time.tv_sec * 1000 + current_time.tv_usec / 1000;
+	long elapsed_ms = current_ms - start_ms;
+	printf("Elapsed time: %ld ms\n", elapsed_ms);
+
+	return 0;
 }
