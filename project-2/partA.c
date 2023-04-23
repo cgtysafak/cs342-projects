@@ -4,7 +4,8 @@
 #include <string.h>
 #include <unistd.h>
 
-struct BurstNode {
+typedef struct BurstNode
+{
     int pid;
     int burst_length;
     int arrival_time;
@@ -13,7 +14,22 @@ struct BurstNode {
     int turnaround_time;
     int processor_id;
     struct BurstNode* next;
-};
+} BurstNode;
+
+Burst* create_burst(int pid, int length, int arrival_time)
+{
+    Burst* burst = (Burst*) malloc(sizeof(Burst));
+    burst->pid = pid;
+    burst->length = length;
+    burst->arrival_time = arrival_time;
+    burst->remaining_time = length;
+    burst->finish_time = 0;
+    burst->turnaround_time = 0;
+    burst->cpu_id = 0;
+    burst->next = NULL;
+    return burst;
+}
+
 int main(int argc, char *argv[])
 {
 	int n = 2;					// default value for -n
@@ -97,52 +113,50 @@ int main(int argc, char *argv[])
 	gettimeofday(&start_time, NULL);
 	long start_ms = start_time.tv_sec * 1000 + start_time.tv_usec / 1000;
 
-	   // Do some work here...
-    char *fileName = infile;
-    FILE * fp;
-    char * line = NULL;
-    size_t len = 0;
-    ssize_t read;
-    char *token = NULL;
-    fp = fopen(fileName, "r");
-    if (fp == NULL)
-        exit(EXIT_FAILURE);
+	// Do some work here...
+	char *fileName = infile;
+	FILE * fp;
+	char * line = NULL;
+	size_t len = 0;
+	ssize_t read;
+	char *token = NULL;
+	fp = fopen(fileName, "r");
+	if (fp == NULL)
+		exit(EXIT_FAILURE);
 
-    while ((read = getline(&line, &len, fp)) != -1) {
-        char lie[len];
-        printf("%s", lie);
-        printf("Retrieved line of length %zu:\n", read);
-        printf("%s", line);
-        strcpy(lie, line);
-        token = strtok(lie, " ");
-        // printf("%s\n", token);
-        if (token != NULL && strcmp(token, "PL") == 0) {
-            printf("First word: %s\n", token);
-            token = strtok(NULL, " ");
-            printf("Length: %s\n", token);
-            int burst_length = atoi(token);
+	while ((read = getline(&line, &len, fp)) != -1)
+	{
+		char lie[len];
 
-        }
+		printf("Retrieved line of length %zu:\n", read);
+		printf("%s", line);
 
-        if (token != NULL && strcmp(token, "IAT") == 0) {
-            printf("First word: %s\n", token);
-            token = strtok(NULL, " ");
-            printf("Arrival time: %s\n", token);
-            int arrival_time = atoi(token);
-            printf("%d\n", arrival_time);
+		strcpy(lie, line);
+		token = strtok(lie, " ");
 
-        }
+		if (token != NULL && strcmp(token, "PL") == 0)
+		{
+			printf("First word: %s\n", token);
+			token = strtok(NULL, " ");
+			printf("Length: %s\n", token);
+			int burst_length = atoi(token);
+		}
 
-        /*
-        while(token != NULL)
-        {
-            printf("%s\n", token);
-        } */   
-    }
+		if (token != NULL && strcmp(token, "IAT") == 0)
+		{
+			printf("First word: %s\n", token);
+			token = strtok(NULL, " ");
+			printf("Arrival time: %s\n", token);
+			int arrival_time = atoi(token);
+			printf("%d\n", arrival_time);
 
-    fclose(fp);
-    if (line)
-        free(line);
+			
+		}
+	}
+
+	fclose(fp);
+	if (line)
+		free(line);
 
 	gettimeofday(&current_time, NULL);
 	long current_ms = current_time.tv_sec * 1000 + current_time.tv_usec / 1000;
