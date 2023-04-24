@@ -4,6 +4,7 @@
 #include <string.h>
 #include <unistd.h>
 #include <stdbool.h>
+#include <pthread.h>
 
 typedef struct BurstNode
 {
@@ -16,6 +17,13 @@ typedef struct BurstNode
     int cpu_id;
     struct BurstNode* next;
 } BurstNode;
+
+typedef struct thread_struct
+{
+    int cpu_id;
+    int elapsed_ptime;
+    struct BurstNode* burst;
+} thread_struct;
 
 
 void insert(struct BurstNode* previous, int pid, int length, int arrival_time)
@@ -62,26 +70,27 @@ void printList(struct BurstNode* head)
     struct BurstNode* temp = head;
     while(temp != NULL)
     {
-        printf("pid %d ", temp->pid);
-        printf("length %d ", temp->burst_length);
+        printf("pid: %d -->", temp->pid);
+        printf("length %d\n", temp->burst_length);
         temp = temp->next;
     }
 }
 
-/*
-Burst* create_burst(int pid, int length, int arrival_time)
+
+void *cpu_process(void *args)
 {
-    Burst* burst = (Burst*) malloc(sizeof(Burst));
-    burst->pid = pid;
-    burst->burst_length = length;
-    burst->arrival_time = arrival_time;
-    burst->remaining_time = length;
-    burst->finish_time = 0;
-    burst->turnaround_time = 0;
-    burst->cpu_id = 0;
-    burst->next = NULL;
-    return burst;
-}*/
+    thread_struct *arg = (thread_struct*) args;
+
+    printf("Processor: %d is running \n", arg->cpu_id);
+    if(arg->elapsed_ptime == 0)
+        return NULL;
+    printf("nomnom");
+    //int cpu_id = *((int*) args);
+    //printf("CPU %d is running", cpu_id);
+    pthread_exit(NULL);
+    return NULL;
+}  
+
 
 int main(int argc, char *argv[])
 {
@@ -167,6 +176,54 @@ int main(int argc, char *argv[])
     long start_ms = start_time.tv_sec * 1000 + start_time.tv_usec / 1000;
 
     // Do some work here...
+
+    
+    //THREAD CREATION
+    pthread_t threads[n];
+    int cpu_ids[n]; 
+    int create_thread;
+    int join_thread;
+
+    for(int i = 0; i < n; i++)
+    {
+        cpu_ids[i] = i;
+        BurstNode* initial = NULL;
+        int elapsed_ptime = 0;
+        thread_struct args;
+        args.cpu_id = cpu_ids[i];
+        args.elapsed_ptime = 0;
+        args.burst = NULL;
+
+        //void *args[3] = {&cpu_ids[i], &elapsed_ptime, &initial};
+        //void *args[3] = {&cpu_ids[i], 0, NULL};
+        //create_thread = pthread_create(&threads[i], NULL, cpu_process, (void*)args);
+        create_thread = pthread_create(&threads[i], NULL, cpu_process, &args);   
+        if(create_thread) 
+        {
+            printf("Processor: %d", cpu_ids[i]);
+            printf("Error: return code from pthred_create() is %d\n", create_thread);
+            return -1;
+        }
+        printf("for loop: %d\n", i);
+    }   
+
+
+    for( int i=0; i<n; i++)
+    {
+        join_thread = pthread_join(threads[i], NULL);
+        if(join_thread)
+        {
+            printf("Processor: %d", cpu_ids[i]);
+            printf("Error: return code from pthread_join() is %d\n", join_thread);
+            return -1;
+        }
+        else
+        {
+            printf("Processor: %d is succesfully finished\n", cpu_ids[i]);
+        }    
+    } 
+
+    //BURST CREATION
     BurstNode* head = NULL;
     BurstNode* temp = NULL;
     int burst_length, arrival_time;
@@ -186,25 +243,25 @@ int main(int argc, char *argv[])
     {
         char lie[len];
 
-        printf("Retrieved line of length %zu:\n", read);
-        printf("%s", line);
+        //printf("Retrieved line of length %zu:\n", read);
+        //printf("%s", line);
 
         strcpy(lie, line);
         token = strtok(lie, " ");
 
         if (token != NULL && strcmp(token, "PL") == 0)
         {
-            printf("First word: %s\n", token);
+            //printf("First word: %s\n", token);
             token = strtok(NULL, " ");
-            printf("Length: %s\n", token);
+            //printf("Length: %s\n", token);
             burst_length = atoi(token);
         }
 
         if (token != NULL && strcmp(token, "IAT") == 0)
         {
-            printf("First word: %s\n", token);
+            //printf("First word: %s\n", token);
             token = strtok(NULL, " ");
-            printf("Arrival time: %s\n", token);
+            //printf("Arrival time: %s\n", token);
             arrival_time = atoi(token);
             if(head == NULL)
             {
@@ -270,7 +327,7 @@ int main(int argc, char *argv[])
     {
         BurstNode* tmp;
         bool dummy_item = false;
-        while(!dummy_item)
+        while(dummy_item)
         {
             //WE CAN PUT THAT CODE TO INSIDE A METHOD, OTHERWISE ALL CODES CAN BE CONFUSING
             tmp = head;
@@ -282,7 +339,7 @@ int main(int argc, char *argv[])
                 bool available_processor = false;
                 //check processors respectively, until find an available processor
                 //if not, wait until one of will be available
-                while(available_processor)
+                while(!available_processor)
                 {    
                     available_processor = true;
                     for(int i = 0; i < n; i++)
