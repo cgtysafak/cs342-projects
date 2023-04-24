@@ -3,6 +3,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
+#include <stdbool.h>
 
 typedef struct BurstNode
 {
@@ -34,7 +35,6 @@ void insert(struct BurstNode* previous, int pid, int length, int arrival_time)
     new_node->next = previous->next;
     
     previous->next= new_node;
-        
 }
 
 void push(struct BurstNode** head, int pid, int length, int arrival_time)
@@ -217,7 +217,7 @@ int main(int argc, char *argv[])
                 insert(temp, pid, burst_length, arrival_time);
                 temp = temp->next;
                 pid++;
-            }    
+            }
         }
     }    
     fclose(fp);
@@ -225,6 +225,96 @@ int main(int argc, char *argv[])
         free(line);
 
     printList(head);
+
+    //SINGLE QUEUE APPROACH
+
+    //SJF algorithm picking shortest job from linked list
+    if(alg == "SJF") 
+    { 
+        BurstNode* min_node;
+        BurstNode* tmp;
+        int min_length;
+        bool dummy_item = false;
+        while(!dummy_item)
+        {
+            //WE CAN PUT THAT CODE TO INSIDE A METHOD, OTHERWISE ALL CODES CAN BE CONFUSING
+            min_node = head;
+            tmp = head;
+            min_length = head->burst_length;
+            while(tmp != NULL)
+            {    
+                if(tmp->burst_length < min_length)
+                {
+                    min_length = tmp->burst_length;
+                    min_node = tmp;
+                } 
+                tmp = tmp->next;
+            }
+            dummy_item = true;
+            bool available_processor = false;
+            //check processors respectively, until find an available processor
+            //if not, wait until one of them will be available
+            while(!available_processor)
+            {    
+                available_processor = true;
+                for(int i = 0; i < n; i++)
+                {
+                    // TODO nasıl yapılacak bu kısım bilmiyorum 
+                }
+            }
+        }
+    }
+
+    //ROUND ROBIN ALGORITHM
+    if( alg = "RR")
+    {
+        BurstNode* tmp;
+        bool dummy_item = false;
+        while(!dummy_item)
+        {
+            //WE CAN PUT THAT CODE TO INSIDE A METHOD, OTHERWISE ALL CODES CAN BE CONFUSING
+            tmp = head;
+            
+            dummy_item = true;
+
+            while( tmp != NULL) 
+            {   
+                bool available_processor = false;
+                //check processors respectively, until find an available processor
+                //if not, wait until one of will be available
+                while(available_processor)
+                {    
+                    available_processor = true;
+                    for(int i = 0; i < n; i++)
+                    {
+                        // TO DO nasıl yapılacak bu kısım bilmiyorum
+                        //if it is available bunun kodu yazılacak
+                        if( available_processor)
+                        {
+                            if(tmp->remaining_time > 20)
+                            {
+                                tmp->remaining_time -= 20;
+                            }
+
+                            else
+                            {
+                                int elapsed_time = tmp->remaining_time;
+                                tmp->remaining_time = 0;
+                            }  
+                            break;  
+
+                        }    
+
+
+                    }  
+                }
+                tmp = tmp->next;
+                while(tmp->remaining_time == 0 && tmp != NULL)
+                    tmp = tmp->next;
+            }     
+
+        } 
+    }   
 
     gettimeofday(&current_time, NULL);
     long current_ms = current_time.tv_sec * 1000 + current_time.tv_usec / 1000;
