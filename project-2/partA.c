@@ -6,6 +6,8 @@
 #include <stdbool.h>
 #include <pthread.h>
 
+pthread_mutex_t lock[20];
+
 typedef struct BurstNode
 {
     int pid;
@@ -22,6 +24,7 @@ typedef struct thread_struct
 {
     int cpu_id;
     int elapsed_ptime;
+    int current_time;
     struct BurstNode* burst;
 } thread_struct;
 
@@ -76,17 +79,31 @@ void printList(struct BurstNode* head)
     }
 }
 
+void printBursts( struct BurstNode* head)
+{
+    struct BurstNode* temp = head;
+    while(temp != NULL && temp->pid != -1)
+    {
+        printf("pid\t cpu\t burstlen\t arv\t finish\t waitingtime\t turnaround\n");
+        printf("%d\t %d\t %d\t %d\t %d\t %d\t %d\n", temp->pid, temp->cpu_id, temp->burst_length, temp->arrival_time,
+                                                    temp->finish_time, (temp->turnaround_time-temp->burst_length), 
+                                                    temp->turnaround_time);
+        temp = temp->next;
+    }
+}
+
 
 void *cpu_process(void *args)
 {
     thread_struct *arg = (thread_struct*) args;
+    pthread_mutex_lock(&(lock[arg->cpu_id]));
 
+    int time = arg->current_time + arg->elapsed_ptime;
     printf("Processor: %d is running \n", arg->cpu_id);
-    if(arg->elapsed_ptime == 0)
-        return NULL;
-    printf("nomnom");
-    //int cpu_id = *((int*) args);
-    //printf("CPU %d is running", cpu_id);
+    
+    //while(time > arg->current_time);
+    
+    pthread_mutex_unlock(&(lock[arg->cpu_id]));
     pthread_exit(NULL);
     return NULL;
 }  
@@ -183,21 +200,27 @@ int main(int argc, char *argv[])
     int cpu_ids[n]; 
     int create_thread;
     int join_thread;
+    thread_struct args[n];
+
+    for(int i=0; i<n; i++)
+    {
+        pthread_mutex_init(&lock[i], NULL);
+    }    
 
     for(int i = 0; i < n; i++)
     {
         cpu_ids[i] = i;
         BurstNode* initial = NULL;
         int elapsed_ptime = 0;
-        thread_struct args;
-        args.cpu_id = cpu_ids[i];
-        args.elapsed_ptime = 0;
-        args.burst = NULL;
+        args[i].cpu_id = cpu_ids[i];
+        args[i].elapsed_ptime = 0;
+        args[i].current_time = 0;
+        args[i].burst = NULL;
 
         //void *args[3] = {&cpu_ids[i], &elapsed_ptime, &initial};
         //void *args[3] = {&cpu_ids[i], 0, NULL};
         //create_thread = pthread_create(&threads[i], NULL, cpu_process, (void*)args);
-        create_thread = pthread_create(&threads[i], NULL, cpu_process, &args);   
+        create_thread = pthread_create(&threads[i], NULL, cpu_process, &args[i]);   
         if(create_thread) 
         {
             printf("Processor: %d", cpu_ids[i]);
@@ -226,7 +249,7 @@ int main(int argc, char *argv[])
     //BURST CREATION
     BurstNode* head = NULL;
     BurstNode* temp = NULL;
-    int burst_length, arrival_time;
+    int burst_length, arrival_time = 0;
 
     int pid = 1;
     char *fileName = infile;
@@ -255,14 +278,6 @@ int main(int argc, char *argv[])
             token = strtok(NULL, " ");
             //printf("Length: %s\n", token);
             burst_length = atoi(token);
-        }
-
-        if (token != NULL && strcmp(token, "IAT") == 0)
-        {
-            //printf("First word: %s\n", token);
-            token = strtok(NULL, " ");
-            //printf("Arrival time: %s\n", token);
-            arrival_time = atoi(token);
             if(head == NULL)
             {
                 push(&head, pid, burst_length, arrival_time);
@@ -276,14 +291,25 @@ int main(int argc, char *argv[])
                 pid++;
             }
         }
+
+        if (token != NULL && strcmp(token, "IAT") == 0)
+        {
+            //printf("First word: %s\n", token);
+            token = strtok(NULL, " ");
+            //printf("Arrival time: %s\n", token);
+            arrival_time += atoi(token);
+        }
     }    
     fclose(fp);
     if (line)
         free(line);
 
     printList(head);
+    printBursts(head);
 
     //SINGLE QUEUE APPROACH
+    //FCFS algorithm 
+  
 
     //SJF algorithm picking shortest job from linked list
     if(alg == "SJF") 
@@ -323,7 +349,7 @@ int main(int argc, char *argv[])
     }
 
     //ROUND ROBIN ALGORITHM
-    if( alg = "RR")
+    if( alg == "RR")
     {
         BurstNode* tmp;
         bool dummy_item = false;
