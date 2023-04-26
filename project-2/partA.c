@@ -6,7 +6,7 @@
 #include <stdbool.h>
 #include <pthread.h>
 
-pthread_mutex_t lock[20];
+pthread_mutex_t lock[10];
 
 typedef struct BurstNode
 {
@@ -102,6 +102,7 @@ void *cpu_process(void *args)
     printf("Processor: %d is running \n", arg->cpu_id);
     
     //while(time > arg->current_time);
+    usleep(arg->elapsed_ptime*1000);
     
     pthread_mutex_unlock(&(lock[arg->cpu_id]));
     pthread_exit(NULL);
