@@ -7,6 +7,7 @@
 #include <pthread.h>
 
 pthread_mutex_t lock[10];
+pthread_mutex_t main_lock;
 
 typedef struct BurstNode
 {
@@ -23,9 +24,12 @@ typedef struct BurstNode
 typedef struct thread_struct
 {
     int cpu_id;
-    int elapsed_ptime;
     int current_time;
     struct BurstNode* burst;
+    char* alg;
+    char* sap;
+    char* qs;
+
 } thread_struct;
 
 
@@ -85,7 +89,7 @@ void printBursts( struct BurstNode* head)
     while(temp != NULL && temp->pid != -1)
     {
         printf("pid\t cpu\t burstlen\t arv\t finish\t waitingtime\t turnaround\n");
-        printf("%d\t %d\t %d\t %d\t %d\t %d\t %d\n", temp->pid, temp->cpu_id, temp->burst_length, temp->arrival_time,
+        printf("%d\t %d\t %d\t\t %d\t %d\t %d\t\t %d\n", temp->pid, temp->cpu_id, temp->burst_length, temp->arrival_time,
                                                     temp->finish_time, (temp->turnaround_time-temp->burst_length), 
                                                     temp->turnaround_time);
         temp = temp->next;
@@ -95,16 +99,103 @@ void printBursts( struct BurstNode* head)
 void *cpu_process(void *args)
 {
     thread_struct *arg = (thread_struct*) args;
-    pthread_mutex_lock(&(lock[arg->cpu_id]));
+
+    int cpu_id = arg->cpu_id;
+    BurstNode* temp = arg->burst;
+    char* alg = arg->alg;
+    char *sap = arg->sap;
+    char *qs = arg->qs;    
 
     //int time = arg->current_time + arg->elapsed_ptime;
-    printf("Processor: %d is running \n", arg->cpu_id);
-    
+    printf("Processor: %d is running \n", cpu_id);
 
-    //while(time > arg->current_time);
-    //usleep(arg->elapsed_ptime*1000);
+    struct timeval start_time, current_time;
+    gettimeofday(&start_time, NULL);
+    long start_ms = start_time.tv_sec * 1000 + start_time.tv_usec / 1000;
+
+    if(strcmp(sap, "S") == 0)
+    {
+        printf("S");
+        //FIRST COME FIRST SERVED ALGORITHM
+        if(strcmp(alg, "FCFS") == 0)
+        {
+            bool is_running = false;
+            int length;
+            while (temp != NULL && temp->pid != -1)
+            {
+                gettimeofday(&current_time, NULL);
+                long current_ms = current_time.tv_sec * 1000 + current_time.tv_usec / 1000;
+                long elapsed_ms = current_ms - start_ms;
+                
+                if(temp->arrival_time > (int)elapsed_ms)
+                {
+                    usleep((temp->arrival_time - (int)elapsed_ms)*1000);
+                    continue;
+                }    
+
+                pthread_mutex_lock(&(main_lock)); 
+                if(temp->remaining_time != 0) 
+                {   
+                    current_ms = current_time.tv_sec * 1000 + current_time.tv_usec / 1000;
+                    elapsed_ms = current_ms - start_ms; 
+                    temp->remaining_time = 0;
+                    temp->cpu_id = cpu_id;
+                    length = temp->burst_length;
+                    temp->finish_time = (int)elapsed_ms + length;
+                    is_running = true;
+                }
+
+                pthread_mutex_unlock(&(main_lock));
+
+
+                if(is_running)
+                {   
+                    printf("pid\t cpu\t burstlen\t arv\t finish\t waitingtime\t turnaround\n");
+                    printf("%d\t %d\t %d\t\t %d\t %d\t %d\t\t %d\n", temp->pid, cpu_id, temp->burst_length, temp->arrival_time,
+                                                    temp->finish_time, (temp->turnaround_time-temp->burst_length), 
+                                                    temp->turnaround_time); 
+                    usleep(length*1000);
+                }    
+
+                is_running = false;
+
+                //join_thread = pthread_join(threads[i], NULL);
+
+  
+                temp = temp->next;
+
+            }
+        }
+        else if(strcmp(alg, "SJF") == 0)
+        {
+            BurstNode* min_node;
+            BurstNode* temp;
+            int min_length;
+            bool dummy_item = false;
+            gettimeofday(&current_time, NULL);
+            long current_ms = current_time.tv_sec * 1000 + current_time.tv_usec / 1000;
+            long elapsed_ms = current_ms - start_ms;
+
+            while(!dummy_item)
+            {
+                //WE CAN PUT THAT CODE TO INSIDE A METHOD, OTHERWISE ALL CODES CAN BE CONFUSING
+                min_node = head;
+                temp = head;
+                min_length = ;
+                while(temp != NULL && temp->pid != -1) 
+                {
+                    if(temp->burst_length < min_length && temp->remaining_time==0 )//&& temp->arrival_time <= current_time
+                    {
+                        min_length = temp->burst_length;
+                        min_node = temp;
+                    } 
+                    temp = temp->next;
+                }
+                dummy_item = true;
+            }
+        }
     
-    pthread_mutex_unlock(&(lock[arg->cpu_id]));
+    }
     pthread_exit(NULL);
     return NULL;
 }  
@@ -203,45 +294,7 @@ int main(int argc, char *argv[])
     for(int i=0; i<n; i++)
         pthread_mutex_init(&lock[i], NULL);
 
-    for(int i = 0; i < n; i++)
-    {
-        cpu_ids[i] = i;
-        BurstNode* initial = NULL;
-        int elapsed_ptime = 0;
-        args[i].cpu_id = cpu_ids[i];
-        args[i].elapsed_ptime = 0;
-        args[i].current_time = 0;
-        args[i].burst = NULL;
-
-        //void *args[3] = {&cpu_ids[i], &elapsed_ptime, &initial};
-        //void *args[3] = {&cpu_ids[i], 0, NULL};
-        //create_thread = pthread_create(&threads[i], NULL, cpu_process, (void*)args);
-        create_thread = pthread_create(&threads[i], NULL, cpu_process, &args[i]);   
-        if(create_thread) 
-        {
-            printf("Processor: %d", cpu_ids[i]);
-            printf("Error: return code from pthred_create() is %d\n", create_thread);
-            return -1;
-        }
-        printf("for loop: %d\n", i);
-    }   
-
-
-    for( int i=0; i<n; i++)
-    {
-
-        join_thread = pthread_join(threads[i], NULL);
-        if(join_thread)
-        {
-            printf("Processor: %d", cpu_ids[i]);
-            printf("Error: return code from pthread_join() is %d\n", join_thread);
-            return -1;
-        }
-        else
-        {
-            printf("Processor: %d is succesfully finished\n", cpu_ids[i]);
-        }   
-    } 
+    pthread_mutex_init(&main_lock, NULL);
 
     //BURST CREATION
     BurstNode* head = NULL;
@@ -305,21 +358,64 @@ int main(int argc, char *argv[])
     printList(head);
     printBursts(head);
 
+    for(int i = 0; i < n; i++)
+    {
+        cpu_ids[i] = i;
+        BurstNode* initial = NULL;
+        int elapsed_ptime = 0;
+        args[i].cpu_id = i;
+        args[i].current_time = 0;
+        args[i].burst = head;
+        args[i].alg = alg;
+        args[i].sap = sap;
+        args[i].qs = qs;
+
+        //void *args[3] = {&cpu_ids[i], &elapsed_ptime, &initial};
+        //void *args[3] = {&cpu_ids[i], 0, NULL};
+        //create_thread = pthread_create(&threads[i], NULL, cpu_process, (void*)args);
+        create_thread = pthread_create(&threads[i], NULL, cpu_process, &args[i]);   
+        if(create_thread) 
+        {
+            printf("Processor: %d", cpu_ids[i]);
+            printf("Error: return code from pthred_create() is %d\n", create_thread);
+            return -1;
+        }
+        printf("for loop: %d\n", i);
+    }   
+
+
+    for( int i=0; i<n; i++)
+    {
+
+        join_thread = pthread_join(threads[i], NULL);
+        if(join_thread)
+        {
+            printf("Processor: %d", cpu_ids[i]);
+            printf("Error: return code from pthread_join() is %d\n", join_thread);
+            return -1;
+        }
+        else
+        {
+            printf("Processor: %d is succesfully finished\n", cpu_ids[i]);
+        }  
+    } 
+
     //SINGLE QUEUE APPROACH
     if(strcmp(sap, "S") == 0)
     {
         printf("S");
 	    //FIRST COME FIRST SERVED ALGORITHM
-	    if(strcmp(alg, "FCFS") == 0)
+	    if(strcmp(alg, "FCF") == 0)
 	    {
-		    BurstNode* tmp = head;
+		    BurstNode* temp = head;
             int available_processor_no = -1;
             bool available_processor = false;
-		    while (tmp != NULL)
+		    while (temp != NULL)
 		    {
                 available_processor = false;
                 while (!available_processor)
-                {    
+                {  
+                    thread_struct* arg = (thread_struct*) malloc(n * sizeof(thread_struct));  
                     for( int i = 0; i<n; i++)
                     {
                         if( !pthread_mutex_trylock(&lock[i]))
@@ -328,7 +424,7 @@ int main(int argc, char *argv[])
                             available_processor_no = i;
                             available_processor = true;
                             args[i].cpu_id = cpu_ids[i];
-                            args[i].elapsed_ptime = 0;  //temp->burst_length;
+                            //args[i].elapsed_ptime = 0;  //temp->burst_length;
                             args[i].current_time = 0;
                             args[i].burst = NULL;
                             create_thread = pthread_create(&threads[i], NULL, cpu_process, &args[i]);   
@@ -338,11 +434,51 @@ int main(int argc, char *argv[])
                                 printf("Error: return code from pthred_create() is %d\n", create_thread);
                                 return -1;
                             }
-                            printf("burası da\n");
-                            break;
+                            join_thread = pthread_join(threads[i], NULL);
+                            if(join_thread)
+                            {
+                                printf("Processor: %d", cpu_ids[i]);
+                                printf("Error: return code from pthread_join() is %d\n", join_thread);
+                                return -1;
+                            }
+                            else
+                            {
+                                printf("Processor: %d is succesfully finished\n", cpu_ids[i]);
+                            } 
+                            free(arg);
 
-                        }    
+                            printf("burası da\n");   
+
+                        }  
+
+                        if(available_processor)
+                            break;  
                     } 
+
+                    /*
+                    int is_available = 0;
+                    pthread_mutex_lock(&main_lock);
+
+                    printf("%d", is_available);
+
+                    while(!is_available)
+                    {    
+                        for( int i = 0; i < n; i++)
+                        {
+                            if( !pthread_mutex_trylock(&lock[i]))
+                            {    
+                                is_available = 1;
+                                break;
+                            }
+
+                        } 
+                    }  
+
+                    usleep(0);
+
+                    pthread_mutex_unlock(&main_lock);  */
+
+                    /*
                     printf("off");
                     if (!available_processor)
                     {  
@@ -364,33 +500,34 @@ int main(int argc, char *argv[])
                                 printf("Processor: %d is succesfully finished\n", cpu_ids[i]);
                             } 
                         }
-                    } 
+                    }  */
                 }   
 		        
-	        	tmp = tmp->next;
+	        	temp = temp->next;
+
 	    	}
 	    }
 
 	    else if(strcmp(alg, "SJF") == 0)
 	    {
 	        BurstNode* min_node;
-	        BurstNode* tmp;
+	        BurstNode* temp;
 	        int min_length;
 	        bool dummy_item = false;
 	        while(!dummy_item)
 	        {
 	            //WE CAN PUT THAT CODE TO INSIDE A METHOD, OTHERWISE ALL CODES CAN BE CONFUSING
 	            min_node = head;
-	            tmp = head;
+	            temp = head;
 	            min_length = head->burst_length;
-	            while(tmp != NULL)
+	            while(temp != NULL && temp->pid != -1) 
 	            {
-	                if(tmp->burst_length < min_length)
+	                if(temp->burst_length < min_length ) //&& temp->arrival_time <= current_time
 	                {
-	                    min_length = tmp->burst_length;
-	                    min_node = tmp;
+	                    min_length = temp->burst_length;
+	                    min_node = temp;
 	                } 
-	                tmp = tmp->next;
+	                temp = temp->next;
 	            }
 	            dummy_item = true;
 	            bool available_processor = false;
@@ -408,16 +545,16 @@ int main(int argc, char *argv[])
 	    }
 	    else if(strcmp(alg, "RR") == 0)
 	    {
-	        BurstNode* tmp;
+	        BurstNode* temp;
 	        bool dummy_item = false;
 	        while(dummy_item)
 	        {
 	            //WE CAN PUT THAT CODE TO INSIDE A METHOD, OTHERWISE ALL CODES CAN BE CONFUSING
-	            tmp = head;
+	            temp = head;
 	            
 	            dummy_item = true;
 
-	            while( tmp != NULL) 
+	            while( temp != NULL) 
 	            {
 	                bool available_processor = false;
 	                //check processors respectively, until find an available processor
@@ -431,21 +568,21 @@ int main(int argc, char *argv[])
 	                        // if it is available bunun kodu yazılacak
 	                        if( available_processor)
 	                        {
-	                            if(tmp->remaining_time > 20)
-	                                tmp->remaining_time -= 20;
+	                            if(temp->remaining_time > 20)
+	                                temp->remaining_time -= 20;
 	                            else
 	                            {
-	                                int elapsed_time = tmp->remaining_time;
-	                                tmp->remaining_time = 0;
+	                                int elapsed_time = temp->remaining_time;
+	                                temp->remaining_time = 0;
 	                            }
 
 	                            break;
 	                        }
 	                    }
 	                }
-	                tmp = tmp->next;
-	                while(tmp->remaining_time == 0 && tmp != NULL)
-	                    tmp = tmp->next;
+	                temp = temp->next;
+	                while(temp->remaining_time == 0 && temp != NULL)
+	                    temp = temp->next;
 	            }
 	        }
 	    }
@@ -459,10 +596,10 @@ int main(int argc, char *argv[])
 		//TODO
 	}
 
-    gettimeofday(&current_time, NULL);
-    long current_ms = current_time.tv_sec * 1000 + current_time.tv_usec / 1000;
-    long elapsed_ms = current_ms - start_ms;
-    printf("Elapsed time: %ld ms\n", elapsed_ms);
+    //gettimeofday(&current_time, NULL);
+    //long current_ms = current_time.tv_sec * 1000 + current_time.tv_usec / 1000;
+    //long elapsed_ms = current_ms - start_ms;
+    //printf("Elapsed time: %ld ms\n", elapsed_ms);
 
     return 0;
 }
