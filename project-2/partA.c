@@ -165,34 +165,91 @@ void *cpu_process(void *args)
                 temp = temp->next;
 
             }
+            pthread_exit(NULL);
         }
+
         else if(strcmp(alg, "SJF") == 0)
         {
             BurstNode* min_node;
-            BurstNode* temp;
+            BurstNode* temp = arg->burst;
             int min_length;
             bool dummy_item = false;
-            gettimeofday(&current_time, NULL);
-            long current_ms = current_time.tv_sec * 1000 + current_time.tv_usec / 1000;
-            long elapsed_ms = current_ms - start_ms;
-
+            int length;
+            
             while(!dummy_item)
             {
-                //WE CAN PUT THAT CODE TO INSIDE A METHOD, OTHERWISE ALL CODES CAN BE CONFUSING
-                min_node = head;
-                temp = head;
-                min_length = ;
+                temp = arg->burst;
+                dummy_item = true;
+                while( temp != NULL)
+                {
+                    if(temp->remaining_time != 0)
+                        dummy_item = false; 
+                    temp = temp->next;     
+
+                } 
+                if(dummy_item) 
+                    break;
+
+                gettimeofday(&current_time, NULL);
+                long current_ms = current_time.tv_sec * 1000 + current_time.tv_usec / 1000;
+                long elapsed_ms = current_ms - start_ms;
+                temp = arg->burst;
+                min_node = NULL;
+                min_length = 999999;
                 while(temp != NULL && temp->pid != -1) 
                 {
-                    if(temp->burst_length < min_length && temp->remaining_time==0 )//&& temp->arrival_time <= current_time
-                    {
+                    if(temp->burst_length < min_length && temp->remaining_time!=0 && temp->pid!=-1
+                                    && temp->arrival_time <= (int)elapsed_ms)
+                    {    
                         min_length = temp->burst_length;
                         min_node = temp;
-                    } 
+                    }
+
+                    if(temp->arrival_time > (int)elapsed_ms)
+                        break;
+
                     temp = temp->next;
                 }
-                dummy_item = true;
-            }
+    
+                
+                gettimeofday(&current_time, NULL);
+                current_ms = current_time.tv_sec * 1000 + current_time.tv_usec / 1000;
+                elapsed_ms = current_ms - start_ms;
+
+                if(min_node== NULL)
+                {
+                    current_ms = current_time.tv_sec * 1000 + current_time.tv_usec / 1000;
+                    elapsed_ms = current_ms - start_ms;
+                    usleep((temp->arrival_time - (int)elapsed_ms)*1000);
+                    continue;         
+                } 
+ 
+
+                printf("Pid:%d", min_node->pid );
+                
+                pthread_mutex_lock(&(main_lock)); 
+                if(min_node->remaining_time != 0) 
+                {   
+                    long current_ms = current_time.tv_sec * 1000 + current_time.tv_usec / 1000;
+                    long elapsed_ms = current_ms - start_ms; 
+                    min_node->remaining_time = 0;
+                    min_node->cpu_id = cpu_id;
+                    length = min_node->burst_length;
+                    min_node->finish_time = (int)elapsed_ms + length;
+                }
+
+                pthread_mutex_unlock(&(main_lock));
+
+                printf("pid\t cpu\t burstlen\t arv\t finish\t waitingtime\t turnaround\n");
+                printf("%d\t %d\t %d\t\t %d\t %d\t %d\t\t %d\n", min_node->pid, cpu_id, min_node->burst_length, min_node->arrival_time,
+                                                    min_node->finish_time, (min_node->turnaround_time-min_node->burst_length), 
+                                                    min_node->turnaround_time); 
+
+                usleep(length*1000);
+                continue;
+
+            } 
+            pthread_exit(NULL);
         }
     
     }
@@ -206,7 +263,7 @@ int main(int argc, char *argv[])
     int n = 2;                  // default value for -n
     char* sap = "S";            // default value for -a
     char* qs = "RM";            // default value for -a (multi-queue)
-    char* alg = "FCFS";           // default value for -s
+    char* alg = "SJF";           // default value for -s
     int q = 20;                 // default value for -s (RR quantum)
     char* infile = "in.txt";    // default value for -i
     int outmode = 1;            // default value for -m
@@ -350,7 +407,8 @@ int main(int argc, char *argv[])
             //printf("Arrival time: %s\n", token);
             arrival_time += atoi(token);
         }
-    }    
+    }
+    insert(temp, -1, 0, 0);    
     fclose(fp);
     if (line)
         free(line);
@@ -404,14 +462,14 @@ int main(int argc, char *argv[])
     if(strcmp(sap, "S") == 0)
     {
         printf("S");
-	    //FIRST COME FIRST SERVED ALGORITHM
-	    if(strcmp(alg, "FCF") == 0)
-	    {
-		    BurstNode* temp = head;
+        //FIRST COME FIRST SERVED ALGORITHM
+        if(strcmp(alg, "FCF") == 0)
+        {
+            BurstNode* temp = head;
             int available_processor_no = -1;
             bool available_processor = false;
-		    while (temp != NULL)
-		    {
+            while (temp != NULL)
+            {
                 available_processor = false;
                 while (!available_processor)
                 {  
@@ -502,99 +560,99 @@ int main(int argc, char *argv[])
                         }
                     }  */
                 }   
-		        
-	        	temp = temp->next;
+                
+                temp = temp->next;
 
-	    	}
-	    }
+            }
+        }
 
-	    else if(strcmp(alg, "SJF") == 0)
-	    {
-	        BurstNode* min_node;
-	        BurstNode* temp;
-	        int min_length;
-	        bool dummy_item = false;
-	        while(!dummy_item)
-	        {
-	            //WE CAN PUT THAT CODE TO INSIDE A METHOD, OTHERWISE ALL CODES CAN BE CONFUSING
-	            min_node = head;
-	            temp = head;
-	            min_length = head->burst_length;
-	            while(temp != NULL && temp->pid != -1) 
-	            {
-	                if(temp->burst_length < min_length ) //&& temp->arrival_time <= current_time
-	                {
-	                    min_length = temp->burst_length;
-	                    min_node = temp;
-	                } 
-	                temp = temp->next;
-	            }
-	            dummy_item = true;
-	            bool available_processor = false;
-	            //check processors respectively, until find an available processor
-	            //if not, wait until one of them will be available
-	            while(!available_processor)
-	            {
-	                available_processor = true;
-	                for(int i = 0; i < n; i++)
-	                {
-	                    // TODO nasıl yapılacak bu kısım bilmiyorum 
-	                }
-	            }
-	        }
-	    }
-	    else if(strcmp(alg, "RR") == 0)
-	    {
-	        BurstNode* temp;
-	        bool dummy_item = false;
-	        while(dummy_item)
-	        {
-	            //WE CAN PUT THAT CODE TO INSIDE A METHOD, OTHERWISE ALL CODES CAN BE CONFUSING
-	            temp = head;
-	            
-	            dummy_item = true;
+        else if(strcmp(alg, "SJF") == 0)
+        {
+            BurstNode* min_node;
+            BurstNode* temp;
+            int min_length;
+            bool dummy_item = false;
+            while(!dummy_item)
+            {
+                //WE CAN PUT THAT CODE TO INSIDE A METHOD, OTHERWISE ALL CODES CAN BE CONFUSING
+                min_node = head;
+                temp = head;
+                min_length = head->burst_length;
+                while(temp != NULL && temp->pid != -1) 
+                {
+                    if(temp->burst_length < min_length ) //&& temp->arrival_time <= current_time
+                    {
+                        min_length = temp->burst_length;
+                        min_node = temp;
+                    } 
+                    temp = temp->next;
+                }
+                dummy_item = true;
+                bool available_processor = false;
+                //check processors respectively, until find an available processor
+                //if not, wait until one of them will be available
+                while(!available_processor)
+                {
+                    available_processor = true;
+                    for(int i = 0; i < n; i++)
+                    {
+                        // TODO nasıl yapılacak bu kısım bilmiyorum 
+                    }
+                }
+            }
+        }
+        else if(strcmp(alg, "RR") == 0)
+        {
+            BurstNode* temp;
+            bool dummy_item = false;
+            while(dummy_item)
+            {
+                //WE CAN PUT THAT CODE TO INSIDE A METHOD, OTHERWISE ALL CODES CAN BE CONFUSING
+                temp = head;
+                
+                dummy_item = true;
 
-	            while( temp != NULL) 
-	            {
-	                bool available_processor = false;
-	                //check processors respectively, until find an available processor
-	                //if not, wait until one of will be available
-	                while(!available_processor)
-	                {
-	                    available_processor = true;
-	                    for(int i = 0; i < n; i++)
-	                    {
-	                        // TO DO nasıl yapılacak bu kısım bilmiyorum
-	                        // if it is available bunun kodu yazılacak
-	                        if( available_processor)
-	                        {
-	                            if(temp->remaining_time > 20)
-	                                temp->remaining_time -= 20;
-	                            else
-	                            {
-	                                int elapsed_time = temp->remaining_time;
-	                                temp->remaining_time = 0;
-	                            }
+                while( temp != NULL) 
+                {
+                    bool available_processor = false;
+                    //check processors respectively, until find an available processor
+                    //if not, wait until one of will be available
+                    while(!available_processor)
+                    {
+                        available_processor = true;
+                        for(int i = 0; i < n; i++)
+                        {
+                            // TO DO nasıl yapılacak bu kısım bilmiyorum
+                            // if it is available bunun kodu yazılacak
+                            if( available_processor)
+                            {
+                                if(temp->remaining_time > 20)
+                                    temp->remaining_time -= 20;
+                                else
+                                {
+                                    int elapsed_time = temp->remaining_time;
+                                    temp->remaining_time = 0;
+                                }
 
-	                            break;
-	                        }
-	                    }
-	                }
-	                temp = temp->next;
-	                while(temp->remaining_time == 0 && temp != NULL)
-	                    temp = temp->next;
-	            }
-	        }
-	    }
-	    else
-	    {
-	    	// Error
-	    }
-	}
-	else if(strcmp(sap, "M") == 0)
-	{
-		//TODO
-	}
+                                break;
+                            }
+                        }
+                    }
+                    temp = temp->next;
+                    while(temp->remaining_time == 0 && temp != NULL)
+                        temp = temp->next;
+                }
+            }
+        }
+        else
+        {
+            // Error
+        }
+    }
+    else if(strcmp(sap, "M") == 0)
+    {
+        //TODO
+    }
 
     //gettimeofday(&current_time, NULL);
     //long current_ms = current_time.tv_sec * 1000 + current_time.tv_usec / 1000;
