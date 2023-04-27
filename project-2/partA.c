@@ -85,15 +85,50 @@ void printList(struct BurstNode* head)
 
 void printBursts( struct BurstNode* head)
 {
+    int sum = 0;
+    int counter = 0;
     struct BurstNode* temp = head;
     while(temp != NULL && temp->pid != -1)
     {
+        sum += temp->turnaround_time;
+        counter += 1;
         printf("pid\t cpu\t burstlen\t arv\t finish\t waitingtime\t turnaround\n");
         printf("%d\t %d\t %d\t\t %d\t %d\t %d\t\t %d\n", temp->pid, temp->cpu_id, temp->burst_length, temp->arrival_time,
                                                     temp->finish_time, (temp->turnaround_time-temp->burst_length), 
                                                     temp->turnaround_time);
         temp = temp->next;
     }
+    int average_turnaround_time = sum/counter;
+    printf("average turnaround time: %dms", average_turnaround_time);
+
+}
+
+int get_total_length(struct BurstNode* head)
+{
+    struct BurstNode* temp = head;
+    int total_length = 0;
+    while(temp != NULL && temp->pid != -1)
+    {
+        total_length += temp->burst_length;
+        temp = temp->next;
+    }
+    return total_length;
+}
+
+int get_min_length(BurstNode* head[], int n)
+{
+    int min_length = get_total_length(head[0]);
+    int min_index = 0;
+    for(int i=1; i<n; i++)
+    {
+        if(get_total_length(head[i]) < min_length)
+        {
+            min_length = get_total_length(head[i]);
+            min_index = i;
+        }    
+
+    }  
+    return min_index;  
 }
 
 void *cpu_process(void *args)
@@ -142,6 +177,7 @@ void *cpu_process(void *args)
                     temp->cpu_id = cpu_id;
                     length = temp->burst_length;
                     temp->finish_time = (int)elapsed_ms + length;
+                    temp->turnaround_time = temp->finish_time - temp->burst_length;
                     is_running = true;
                 }
 
@@ -225,7 +261,7 @@ void *cpu_process(void *args)
                 } 
  
 
-                printf("Pid:%d", min_node->pid );
+                //printf("Pid:%d", min_node->pid );
                 
                 pthread_mutex_lock(&(main_lock)); 
                 if(min_node->remaining_time != 0) 
@@ -236,6 +272,7 @@ void *cpu_process(void *args)
                     min_node->cpu_id = cpu_id;
                     length = min_node->burst_length;
                     min_node->finish_time = (int)elapsed_ms + length;
+                    min_node->turnaround_time = min_node->finish_time - length;
                 }
 
                 pthread_mutex_unlock(&(main_lock));
@@ -251,6 +288,42 @@ void *cpu_process(void *args)
             } 
             pthread_exit(NULL);
         }
+        else if(strcmp(alg, "RR") == 0)
+        {
+            BurstNode* temp;
+            bool dummy_item = false;
+            while(dummy_item)
+            {
+                temp = arg->burst;
+                dummy_item = true;
+                while( temp != NULL)
+                {
+                    if(temp->remaining_time != 0)
+                        dummy_item = false; 
+                    temp = temp->next;     
+
+                } 
+                dummy_item = true;
+
+                if(dummy_item) 
+                    break;
+
+                gettimeofday(&current_time, NULL);
+                long current_ms = current_time.tv_sec * 1000 + current_time.tv_usec / 1000;
+                long elapsed_ms = current_ms - start_ms;
+
+                while( temp != NULL) 
+                {
+                    if(temp->remaining_time != 0 && temp->arrival_time <= (int)elapsed_ms)
+                    {
+
+                    }        
+
+                    temp = temp->next;
+
+                }
+            }
+        }
     
     }
     pthread_exit(NULL);
@@ -263,7 +336,7 @@ int main(int argc, char *argv[])
     int n = 2;                  // default value for -n
     char* sap = "S";            // default value for -a
     char* qs = "RM";            // default value for -a (multi-queue)
-    char* alg = "SJF";           // default value for -s
+    char* alg = "FCFS";           // default value for -s
     int q = 20;                 // default value for -s (RR quantum)
     char* infile = "in.txt";    // default value for -i
     int outmode = 1;            // default value for -m
@@ -373,10 +446,6 @@ int main(int argc, char *argv[])
     while ((read = getline(&line, &len, fp)) != -1)
     {
         char lie[len];
-
-        //printf("Retrieved line of length %zu:\n", read);
-        //printf("%s", line);
-
         strcpy(lie, line);
         token = strtok(lie, " ");
 
@@ -416,21 +485,144 @@ int main(int argc, char *argv[])
     printList(head);
     printBursts(head);
 
+    //MULTI QUEUE CREATION
+    BurstNode* heads[n];
+    if(strcmp(sap, "S") == 0)
+    {  
+        BurstNode* tmp[n];  
+        for(int i=0; i<n; i++)
+        {
+            heads[i] = NULL;
+            tmp[i] = NULL;
+        }    
+        int burst_length = 0;
+        int arrival_time = 0;
+
+        int pid = 1;
+        char *fileName = infile;
+        FILE * fp;
+        char * line = NULL;
+        size_t len = 0;
+        ssize_t read;
+        char *token = NULL;
+        fp = fopen(fileName, "r");
+        if (fp == NULL)
+            exit(EXIT_FAILURE);
+
+        if(strcmp(qs, "RM") == 0)
+        {    
+            int i = 0;
+            while ((read = getline(&line, &len, fp)) != -1)
+            {
+                char lie[len];
+
+                strcpy(lie, line);
+                token = strtok(lie, " ");
+
+                if(i >= n)
+                    i = i%n;
+
+                if (token != NULL && strcmp(token, "PL") == 0)
+                {
+                    token = strtok(NULL, " ");
+                    burst_length = atoi(token);
+                    if(heads[i] == NULL)
+                    {
+                        push(&heads[i], pid, burst_length, arrival_time);
+                        tmp[i] = heads[i];
+                        pid++;
+                    }   
+                    else
+                    {
+                        insert(tmp[i], pid, burst_length, arrival_time);
+                        tmp[i] = tmp[i]->next;
+                        pid++;
+                    }
+                    i++;
+                }
+
+                if (token != NULL && strcmp(token, "IAT") == 0)
+                {
+                    printf("First word: %s\n", token);
+                    token = strtok(NULL, " ");
+                    printf("Arrival time: %s\n", token);
+                    arrival_time += atoi(token);
+                }
+            }
+        }
+
+        if(strcmp(qs, "LM") == 0)
+        {
+            while ((read = getline(&line, &len, fp)) != -1)
+            {
+                char lie[len];
+
+                strcpy(lie, line);
+                token = strtok(lie, " ");
+
+                if (token != NULL && strcmp(token, "PL") == 0)
+                {
+                    //printf("First word: %s\n", token);
+                    token = strtok(NULL, " ");
+                    //printf("Length: %s\n", token);
+                    bool is_inserted = false;
+                    burst_length = atoi(token);
+                    for(int i=0; i<n; i++)
+                    {    
+                        if(heads[i] == NULL)
+                        {
+                            push(&heads[i], pid, burst_length, arrival_time);
+                            tmp[i] = heads[i];
+                            is_inserted = true;
+                            pid++;
+                            break;
+                        }
+
+                    }   
+                    if(!is_inserted)
+                    {
+                        int i = get_min_length(heads, n);    
+                        insert(tmp[i], pid, burst_length, arrival_time);
+                        tmp[i] = tmp[i]->next;
+                        pid++;
+                    }
+
+                }
+
+                if (token != NULL && strcmp(token, "IAT") == 0)
+                {
+                    //printf("First word: %s\n", token);
+                    token = strtok(NULL, " ");
+                    //printf("Arrival time: %s\n", token);
+                    arrival_time += atoi(token);
+                }
+            }
+        }   
+    }
+
     for(int i = 0; i < n; i++)
     {
+        printf("for loop %d\n", i);
+        printBursts(heads[i]);
+        printf("\nnom");
         cpu_ids[i] = i;
         BurstNode* initial = NULL;
         int elapsed_ptime = 0;
         args[i].cpu_id = i;
         args[i].current_time = 0;
-        args[i].burst = head;
         args[i].alg = alg;
         args[i].sap = sap;
         args[i].qs = qs;
 
-        //void *args[3] = {&cpu_ids[i], &elapsed_ptime, &initial};
-        //void *args[3] = {&cpu_ids[i], 0, NULL};
-        //create_thread = pthread_create(&threads[i], NULL, cpu_process, (void*)args);
+        if(strcmp(sap, "M") == 0)
+        {
+            args[i].burst = head;
+        }
+        else if(strcmp(sap, "S") == 0)
+        {
+            args[i].burst = heads[i];
+        }    
+
         create_thread = pthread_create(&threads[i], NULL, cpu_process, &args[i]);   
         if(create_thread) 
         {
@@ -444,7 +636,6 @@ int main(int argc, char *argv[])
 
     for( int i=0; i<n; i++)
     {
-
         join_thread = pthread_join(threads[i], NULL);
         if(join_thread)
         {
@@ -465,142 +656,14 @@ int main(int argc, char *argv[])
         //FIRST COME FIRST SERVED ALGORITHM
         if(strcmp(alg, "FCF") == 0)
         {
-            BurstNode* temp = head;
-            int available_processor_no = -1;
-            bool available_processor = false;
-            while (temp != NULL)
-            {
-                available_processor = false;
-                while (!available_processor)
-                {  
-                    thread_struct* arg = (thread_struct*) malloc(n * sizeof(thread_struct));  
-                    for( int i = 0; i<n; i++)
-                    {
-                        if( !pthread_mutex_trylock(&lock[i]))
-                        {
-                            printf("buraya girdi%d", i);
-                            available_processor_no = i;
-                            available_processor = true;
-                            args[i].cpu_id = cpu_ids[i];
-                            //args[i].elapsed_ptime = 0;  //temp->burst_length;
-                            args[i].current_time = 0;
-                            args[i].burst = NULL;
-                            create_thread = pthread_create(&threads[i], NULL, cpu_process, &args[i]);   
-                            if(create_thread) 
-                            {
-                                printf("Processor: %d", cpu_ids[i]);
-                                printf("Error: return code from pthred_create() is %d\n", create_thread);
-                                return -1;
-                            }
-                            join_thread = pthread_join(threads[i], NULL);
-                            if(join_thread)
-                            {
-                                printf("Processor: %d", cpu_ids[i]);
-                                printf("Error: return code from pthread_join() is %d\n", join_thread);
-                                return -1;
-                            }
-                            else
-                            {
-                                printf("Processor: %d is succesfully finished\n", cpu_ids[i]);
-                            } 
-                            free(arg);
 
-                            printf("burası da\n");   
-
-                        }  
-
-                        if(available_processor)
-                            break;  
-                    } 
-
-                    /*
-                    int is_available = 0;
-                    pthread_mutex_lock(&main_lock);
-
-                    printf("%d", is_available);
-
-                    while(!is_available)
-                    {    
-                        for( int i = 0; i < n; i++)
-                        {
-                            if( !pthread_mutex_trylock(&lock[i]))
-                            {    
-                                is_available = 1;
-                                break;
-                            }
-
-                        } 
-                    }  
-
-                    usleep(0);
-
-                    pthread_mutex_unlock(&main_lock);  */
-
-                    /*
-                    printf("off");
-                    if (!available_processor)
-                    {  
-                        printf("join0");  
-                        for( int i = 0; i<n; i++)
-                        {    
-                            //usleep(1000);
-                            printf("join1");
-                            join_thread = pthread_join(threads[i], NULL);
-                            printf("join");
-                            if(join_thread)
-                            {
-                                printf("Processor: %d", cpu_ids[i]);
-                                printf("Error: return code from pthread_join() is %d\n", join_thread);
-                                return -1;
-                            }
-                            else
-                            {
-                                printf("Processor: %d is succesfully finished\n", cpu_ids[i]);
-                            } 
-                        }
-                    }  */
-                }   
-                
-                temp = temp->next;
-
-            }
         }
 
         else if(strcmp(alg, "SJF") == 0)
         {
-            BurstNode* min_node;
-            BurstNode* temp;
-            int min_length;
-            bool dummy_item = false;
-            while(!dummy_item)
-            {
-                //WE CAN PUT THAT CODE TO INSIDE A METHOD, OTHERWISE ALL CODES CAN BE CONFUSING
-                min_node = head;
-                temp = head;
-                min_length = head->burst_length;
-                while(temp != NULL && temp->pid != -1) 
-                {
-                    if(temp->burst_length < min_length ) //&& temp->arrival_time <= current_time
-                    {
-                        min_length = temp->burst_length;
-                        min_node = temp;
-                    } 
-                    temp = temp->next;
-                }
-                dummy_item = true;
-                bool available_processor = false;
-                //check processors respectively, until find an available processor
-                //if not, wait until one of them will be available
-                while(!available_processor)
-                {
-                    available_processor = true;
-                    for(int i = 0; i < n; i++)
-                    {
-                        // TODO nasıl yapılacak bu kısım bilmiyorum 
-                    }
-                }
-            }
+
         }
+
         else if(strcmp(alg, "RR") == 0)
         {
             BurstNode* temp;
@@ -649,15 +712,6 @@ int main(int argc, char *argv[])
             // Error
         }
     }
-    else if(strcmp(sap, "M") == 0)
-    {
-        //TODO
-    }
-
-    //gettimeofday(&current_time, NULL);
-    //long current_ms = current_time.tv_sec * 1000 + current_time.tv_usec / 1000;
-    //long elapsed_ms = current_ms - start_ms;
-    //printf("Elapsed time: %ld ms\n", elapsed_ms);
-
+    
     return 0;
 }
