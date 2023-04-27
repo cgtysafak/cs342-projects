@@ -29,6 +29,7 @@ typedef struct thread_struct
     char* alg;
     char* sap;
     char* qs;
+    int q;
 
 } thread_struct;
 
@@ -85,6 +86,8 @@ void printList(struct BurstNode* head)
 
 void printBursts( struct BurstNode* head)
 {
+    if( head == NULL)
+        return;    
     int sum = 0;
     int counter = 0;
     struct BurstNode* temp = head;
@@ -139,7 +142,8 @@ void *cpu_process(void *args)
     BurstNode* temp = arg->burst;
     char* alg = arg->alg;
     char *sap = arg->sap;
-    char *qs = arg->qs;    
+    char *qs = arg->qs; 
+    int quantum = arg->q;   
 
     //int time = arg->current_time + arg->elapsed_ptime;
     printf("Processor: %d is running \n", cpu_id);
@@ -203,6 +207,7 @@ void *cpu_process(void *args)
             }
             pthread_exit(NULL);
         }
+
         else if(strcmp(alg, "SJF") == 0)
         {
             BurstNode* min_node;
@@ -288,109 +293,110 @@ void *cpu_process(void *args)
             pthread_exit(NULL);
         }
         else if(strcmp(alg, "RR") == 0)
-		{
-			bool is_running = false;
-			BurstNode* temp = arg->burst;
-			bool dummy_item = false;
-			int length;
+        {
+            bool is_running = false;
+            BurstNode* temp = arg->burst;
+            bool dummy_item = false;
+            int length;
 
-			while (!dummy_item)
-			{
-				// printf("\n\n---- outermost while loop -----\n\n");
+            while (!dummy_item)
+            {
+                // printf("\n\n---- outermost while loop -----\n\n");
 
-				temp = arg->burst;
-				dummy_item = true;
+                temp = arg->burst;
+                dummy_item = true;
 
-				while (temp != NULL)
-				{
-					if (temp->remaining_time != 0)
-						dummy_item = false;
-					temp = temp->next;
-				}
-				if (dummy_item)
-					break;
+                while (temp != NULL)
+                {
+                    if (temp->remaining_time != 0)
+                        dummy_item = false;
+                    temp = temp->next;
+                }
+                if (dummy_item)
+                    break;
 
-				gettimeofday(&current_time, NULL);
-				long current_ms = current_time.tv_sec * 1000 + current_time.tv_usec / 1000;
-				long elapsed_ms = current_ms - start_ms;
+                gettimeofday(&current_time, NULL);
+                long current_ms = current_time.tv_sec * 1000 + current_time.tv_usec / 1000;
+                long elapsed_ms = current_ms - start_ms;
 
-				temp = arg->burst;
-				bool stop = false;
-				while ( (temp != NULL && temp->pid != -1) && !stop)
-				{
-					gettimeofday(&current_time, NULL);
-					long current_ms = current_time.tv_sec * 1000 + current_time.tv_usec / 1000;
-					long elapsed_ms = current_ms - start_ms;
+                temp = arg->burst;
+                bool stop = false;
+                while ( (temp != NULL && temp->pid != -1) && !stop)
+                {
+                    gettimeofday(&current_time, NULL);
+                    long current_ms = current_time.tv_sec * 1000 + current_time.tv_usec / 1000;
+                    long elapsed_ms = current_ms - start_ms;
 
-					// printf("\n\n---- innermost while loop -----\n\n");
+                    // printf("\n\n---- innermost while loop -----\n\n");
 
-					if (temp->arrival_time > (int) elapsed_ms)
-					{
-						usleep((temp->arrival_time - (int)elapsed_ms) * 1000);
-						// usleep(quantum * 1000);
+                    if (temp->arrival_time > (int) elapsed_ms)
+                    {
+                        usleep((temp->arrival_time - (int)elapsed_ms) * 1000);
+                        // usleep(quantum * 1000);
 
-						stop = true;
-						continue;
-					}
+                        stop = true;
+                        continue;
+                    }
 
-					pthread_mutex_lock(&(main_lock));
-					if (temp->remaining_time > 0)
-					{
-						if (temp->remaining_time > quantum)
-						{
-							temp->remaining_time -= quantum;
+                    pthread_mutex_lock(&(main_lock));
+                    if (temp->remaining_time > 0)
+                    {
+                        if (temp->remaining_time > quantum)
+                        {
+                            temp->remaining_time -= quantum;
 
-							current_ms = current_time.tv_sec * 1000 + current_time.tv_usec / 1000;
-							elapsed_ms = current_ms - start_ms;
+                            current_ms = current_time.tv_sec * 1000 + current_time.tv_usec / 1000;
+                            elapsed_ms = current_ms - start_ms;
 
-							temp->cpu_id = cpu_id;
-							length = quantum;
+                            temp->cpu_id = cpu_id;
+                            length = quantum;
 
-							is_running = true;
-							
-							// start_time = (int)elapsed_ms;
-						}
-						else
-						{
-							length = temp->remaining_time;
-							temp->remaining_time = 0;
+                            is_running = true;
+                            
+                            // start_time = (int)elapsed_ms;
+                        }
+                        else
+                        {
+                            length = temp->remaining_time;
+                            temp->remaining_time = 0;
 
-							current_ms = current_time.tv_sec * 1000 + current_time.tv_usec / 1000;
-							elapsed_ms = current_ms - start_ms;
-							
-							temp->cpu_id = cpu_id;
+                            current_ms = current_time.tv_sec * 1000 + current_time.tv_usec / 1000;
+                            elapsed_ms = current_ms - start_ms;
+                            
+                            temp->cpu_id = cpu_id;
 
-							is_running = true; // ???
+                            is_running = true; // ???
 
-							// if (start_time == 0)
-							// 	start_time = (int)elapsed_ms;
+                            // if (start_time == 0)
+                            //  start_time = (int)elapsed_ms;
 
-							temp->finish_time = length;
-						}
-					}
+                            temp->finish_time = length;
+                        }
+                    }
 
-			        if(is_running)
-			        {
-			            printf("pid\t cpu\t burstlen\t arv\t finish\t waitingtime\t turnaround\t remaining_time\n");
-			            printf("%d\t %d\t %d\t\t %d\t %d\t %d\t\t %d\t\t %d\n", temp->pid, cpu_id, temp->burst_length, temp->arrival_time,
-			                                            temp->finish_time, (temp->turnaround_time-temp->burst_length), 
-			                                            temp->turnaround_time, temp->remaining_time); 
-			            usleep(length*1000);
-			        }
+                    if(is_running)
+                    {
+                        printf("pid\t cpu\t burstlen\t arv\t finish\t waitingtime\t turnaround\t remaining_time\n");
+                        printf("%d\t %d\t %d\t\t %d\t %d\t %d\t\t %d\t\t %d\n", temp->pid, cpu_id, temp->burst_length, temp->arrival_time,
+                                                        temp->finish_time, (temp->turnaround_time-temp->burst_length), 
+                                                        temp->turnaround_time, temp->remaining_time); 
+                        usleep(length*1000);
+                    }
 
-			        is_running = false;
-					pthread_mutex_unlock(&(main_lock));
+                    is_running = false;
+                    pthread_mutex_unlock(&(main_lock));
 
-					temp = temp->next;
-				}
-			}
+                    temp = temp->next;
+                }
+            }
 
-			pthread_exit(NULL);
-		}
-		else
-		{
-			printf("---- buraya girmemeliydi -----");
-		}
+            pthread_exit(NULL);
+        }
+        else
+        {
+            printf("---- buraya girmemeliydi -----");
+        }
+    
     }
     pthread_exit(NULL);
     return NULL;
@@ -402,7 +408,7 @@ int main(int argc, char *argv[])
     int n = 2;                  // default value for -n
     char* sap = "S";            // default value for -a
     char* qs = "RM";            // default value for -a (multi-queue)
-    char* alg = "FCFS";           // default value for -s
+    char* alg = "RR";           // default value for -s
     int q = 20;                 // default value for -s (RR quantum)
     char* infile = "in.txt";    // default value for -i
     int outmode = 1;            // default value for -m
@@ -553,7 +559,7 @@ int main(int argc, char *argv[])
 
     //MULTI QUEUE CREATION
     BurstNode* heads[n];
-    if(strcmp(sap, "S") == 0)
+    if(strcmp(sap, "M") == 0)
     {  
         BurstNode* tmp[n];  
         for(int i=0; i<n; i++)
@@ -669,7 +675,6 @@ int main(int argc, char *argv[])
     for(int i = 0; i < n; i++)
     {
         printf("for loop %d\n", i);
-        printBursts(heads[i]);
         printf("\nnom");
         cpu_ids[i] = i;
         BurstNode* initial = NULL;
@@ -679,12 +684,13 @@ int main(int argc, char *argv[])
         args[i].alg = alg;
         args[i].sap = sap;
         args[i].qs = qs;
+        args[i].q = q;
 
-        if(strcmp(sap, "M") == 0)
+        if(strcmp(sap, "S") == 0)
         {
             args[i].burst = head;
         }
-        else if(strcmp(sap, "S") == 0)
+        else if(strcmp(sap, "M") == 0)
         {
             args[i].burst = heads[i];
         }    
@@ -778,6 +784,6 @@ int main(int argc, char *argv[])
             // Error
         }
     }
-    
+
     return 0;
 }
