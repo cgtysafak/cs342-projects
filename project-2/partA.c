@@ -203,7 +203,6 @@ void *cpu_process(void *args)
             }
             pthread_exit(NULL);
         }
-
         else if(strcmp(alg, "SJF") == 0)
         {
             BurstNode* min_node;
@@ -289,42 +288,109 @@ void *cpu_process(void *args)
             pthread_exit(NULL);
         }
         else if(strcmp(alg, "RR") == 0)
-        {
-            BurstNode* temp;
-            bool dummy_item = false;
-            while(dummy_item)
-            {
-                temp = arg->burst;
-                dummy_item = true;
-                while( temp != NULL)
-                {
-                    if(temp->remaining_time != 0)
-                        dummy_item = false; 
-                    temp = temp->next;     
+		{
+			bool is_running = false;
+			BurstNode* temp = arg->burst;
+			bool dummy_item = false;
+			int length;
 
-                } 
-                dummy_item = true;
+			while (!dummy_item)
+			{
+				// printf("\n\n---- outermost while loop -----\n\n");
 
-                if(dummy_item) 
-                    break;
+				temp = arg->burst;
+				dummy_item = true;
 
-                gettimeofday(&current_time, NULL);
-                long current_ms = current_time.tv_sec * 1000 + current_time.tv_usec / 1000;
-                long elapsed_ms = current_ms - start_ms;
+				while (temp != NULL)
+				{
+					if (temp->remaining_time != 0)
+						dummy_item = false;
+					temp = temp->next;
+				}
+				if (dummy_item)
+					break;
 
-                while( temp != NULL) 
-                {
-                    if(temp->remaining_time != 0 && temp->arrival_time <= (int)elapsed_ms)
-                    {
+				gettimeofday(&current_time, NULL);
+				long current_ms = current_time.tv_sec * 1000 + current_time.tv_usec / 1000;
+				long elapsed_ms = current_ms - start_ms;
 
-                    }        
+				temp = arg->burst;
+				bool stop = false;
+				while ( (temp != NULL && temp->pid != -1) && !stop)
+				{
+					gettimeofday(&current_time, NULL);
+					long current_ms = current_time.tv_sec * 1000 + current_time.tv_usec / 1000;
+					long elapsed_ms = current_ms - start_ms;
 
-                    temp = temp->next;
+					// printf("\n\n---- innermost while loop -----\n\n");
 
-                }
-            }
-        }
-    
+					if (temp->arrival_time > (int) elapsed_ms)
+					{
+						usleep((temp->arrival_time - (int)elapsed_ms) * 1000);
+						// usleep(quantum * 1000);
+
+						stop = true;
+						continue;
+					}
+
+					pthread_mutex_lock(&(main_lock));
+					if (temp->remaining_time > 0)
+					{
+						if (temp->remaining_time > quantum)
+						{
+							temp->remaining_time -= quantum;
+
+							current_ms = current_time.tv_sec * 1000 + current_time.tv_usec / 1000;
+							elapsed_ms = current_ms - start_ms;
+
+							temp->cpu_id = cpu_id;
+							length = quantum;
+
+							is_running = true;
+							
+							// start_time = (int)elapsed_ms;
+						}
+						else
+						{
+							length = temp->remaining_time;
+							temp->remaining_time = 0;
+
+							current_ms = current_time.tv_sec * 1000 + current_time.tv_usec / 1000;
+							elapsed_ms = current_ms - start_ms;
+							
+							temp->cpu_id = cpu_id;
+
+							is_running = true; // ???
+
+							// if (start_time == 0)
+							// 	start_time = (int)elapsed_ms;
+
+							temp->finish_time = length;
+						}
+					}
+
+			        if(is_running)
+			        {
+			            printf("pid\t cpu\t burstlen\t arv\t finish\t waitingtime\t turnaround\t remaining_time\n");
+			            printf("%d\t %d\t %d\t\t %d\t %d\t %d\t\t %d\t\t %d\n", temp->pid, cpu_id, temp->burst_length, temp->arrival_time,
+			                                            temp->finish_time, (temp->turnaround_time-temp->burst_length), 
+			                                            temp->turnaround_time, temp->remaining_time); 
+			            usleep(length*1000);
+			        }
+
+			        is_running = false;
+					pthread_mutex_unlock(&(main_lock));
+
+					temp = temp->next;
+				}
+			}
+
+			pthread_exit(NULL);
+		}
+		else
+		{
+			printf("---- buraya girmemeliydi -----");
+		}
     }
     pthread_exit(NULL);
     return NULL;
