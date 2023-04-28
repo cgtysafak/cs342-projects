@@ -5,6 +5,7 @@
 #include <unistd.h>
 #include <stdbool.h>
 #include <pthread.h>
+#include <math.h>
 
 pthread_mutex_t lock[10];
 pthread_mutex_t main_lock;
@@ -30,15 +31,14 @@ typedef struct thread_struct
     char* sap;
     char* qs;
     int q;
-
+    int outmode;
 } thread_struct;
-
 
 void insert(struct BurstNode* previous, int pid, int length, int arrival_time)
 {
     struct BurstNode* new_node
         = (struct BurstNode*)malloc(sizeof(struct BurstNode));
-        
+    
     new_node->pid = pid;
     new_node->burst_length = length;
     new_node->arrival_time = arrival_time;
@@ -97,7 +97,7 @@ void printBursts( struct BurstNode* head)
         counter += 1;
         printf("pid\t cpu\t burstlen\t arv\t finish\t waitingtime\t turnaround\n");
         printf("%d\t %d\t %d\t\t %d\t %d\t %d\t\t %d\n", temp->pid, temp->cpu_id, temp->burst_length, temp->arrival_time,
-                                                    temp->finish_time, (temp->turnaround_time-temp->burst_length), 
+                                                    temp->finish_time, (temp->turnaround_time - temp->burst_length), 
                                                     temp->turnaround_time);
         temp = temp->next;
     }
@@ -134,6 +134,32 @@ int get_min_length(BurstNode* head[], int n)
     return min_index;  
 }
 
+//This method is used for both length and arrival time generation
+int random_generator(int T, int T1, int T2)
+{
+    double lambda = 1/ T;
+    int x = T;
+    while(true)
+    {
+        double u = (double) rand() / RAND_MAX;
+        x = (int) (-1 * log10(1 - u) * T);
+        if(x > T1 || x < T2)
+            break;
+    } 
+
+    return x;
+}
+
+int generate_interarrival_time(int T, int T1, int T2) {
+    double l = 1.0 / T;
+    int x;
+    do {
+        double u = (double) rand() / RAND_MAX;
+        x = (int) (-1 * log(1 - u) / l);
+    } while (x < T1 || x > T2);
+    return x;
+}
+
 void *cpu_process(void *args)
 {
     thread_struct *arg = (thread_struct*) args;
@@ -143,7 +169,8 @@ void *cpu_process(void *args)
     char* alg = arg->alg;
     char *sap = arg->sap;
     char *qs = arg->qs; 
-    int quantum = arg->q;   
+    int quantum = arg->q;
+    int outmode = arg->outmode;
 
     //int time = arg->current_time + arg->elapsed_ptime;
     printf("Processor: %d is running \n", cpu_id);
@@ -172,6 +199,7 @@ void *cpu_process(void *args)
                     continue;
                 }    
 
+                int waiting_time = 0;
                 pthread_mutex_lock(&(main_lock)); 
                 if(temp->remaining_time != 0) 
                 {   
@@ -181,26 +209,25 @@ void *cpu_process(void *args)
                     temp->cpu_id = cpu_id;
                     length = temp->burst_length;
                     temp->finish_time = (int)elapsed_ms + length;
-                    temp->turnaround_time = temp->finish_time - temp->burst_length;
+                    temp->turnaround_time = temp->finish_time - temp->arrival_time;
+                    int waiting_time = temp->turnaround_time - temp->burst_length; 
                     is_running = true;
                 }
 
                 pthread_mutex_unlock(&(main_lock));
 
-
                 if(is_running)
-                {   
+                {
                     printf("pid\t cpu\t burstlen\t arv\t finish\t waitingtime\t turnaround\n");
                     printf("%d\t %d\t %d\t\t %d\t %d\t %d\t\t %d\n", temp->pid, cpu_id, temp->burst_length, temp->arrival_time,
-                                                    temp->finish_time, (temp->turnaround_time-temp->burst_length), 
+                                                    temp->finish_time, waiting_time, 
                                                     temp->turnaround_time); 
                     usleep(length*1000);
-                }    
+                }
 
                 is_running = false;
 
                 //join_thread = pthread_join(threads[i], NULL);
-
   
                 temp = temp->next;
 
@@ -267,6 +294,7 @@ void *cpu_process(void *args)
 
                 //printf("Pid:%d", min_node->pid );
                 
+                int waiting_time = 0;
                 pthread_mutex_lock(&(main_lock)); 
                 if(min_node->remaining_time != 0) 
                 {   
@@ -276,14 +304,15 @@ void *cpu_process(void *args)
                     min_node->cpu_id = cpu_id;
                     length = min_node->burst_length;
                     min_node->finish_time = (int)elapsed_ms + length;
-                    min_node->turnaround_time = min_node->finish_time - length;
+                    min_node->turnaround_time = min_node->finish_time - min_node->arrival_time;
+                    int waiting_time = min_node->turnaround_time - min_node->burst_length; 
                 }
 
                 pthread_mutex_unlock(&(main_lock));
 
                 printf("pid\t cpu\t burstlen\t arv\t finish\t waitingtime\t turnaround\n");
                 printf("%d\t %d\t %d\t\t %d\t %d\t %d\t\t %d\n", min_node->pid, cpu_id, min_node->burst_length, min_node->arrival_time,
-                                                    min_node->finish_time, (min_node->turnaround_time-min_node->burst_length), 
+                                                    min_node->finish_time, waiting_time, 
                                                     min_node->turnaround_time); 
 
                 usleep(length*1000);
@@ -357,11 +386,11 @@ void *cpu_process(void *args)
                         }
                         else
                         {
+                            gettimeofday(&current_time, NULL);
+                            long current_ms = current_time.tv_sec * 1000 + current_time.tv_usec / 1000;
+                            long elapsed_ms = current_ms - start_ms;
                             length = temp->remaining_time;
                             temp->remaining_time = 0;
-
-                            current_ms = current_time.tv_sec * 1000 + current_time.tv_usec / 1000;
-                            elapsed_ms = current_ms - start_ms;
                             
                             temp->cpu_id = cpu_id;
 
@@ -369,6 +398,8 @@ void *cpu_process(void *args)
 
                             // if (start_time == 0)
                             //  start_time = (int)elapsed_ms;
+                            temp->finish_time = (int)elapsed_ms + length;
+                            temp->turnaround_time = temp->finish_time - temp->arrival_time;
 
                             temp->finish_time = length;
                         }
@@ -376,10 +407,14 @@ void *cpu_process(void *args)
 
                     if(is_running)
                     {
+                        if(outmode == 2)
+                        {    
                         printf("pid\t cpu\t burstlen\t arv\t finish\t waitingtime\t turnaround\t remaining_time\n");
                         printf("%d\t %d\t %d\t\t %d\t %d\t %d\t\t %d\t\t %d\n", temp->pid, cpu_id, temp->burst_length, temp->arrival_time,
                                                         temp->finish_time, (temp->turnaround_time-temp->burst_length), 
                                                         temp->turnaround_time, temp->remaining_time); 
+                        }
+    
                         usleep(length*1000);
                     }
 
@@ -411,11 +446,12 @@ int main(int argc, char *argv[])
     char* alg = "RR";           // default value for -s
     int q = 20;                 // default value for -s (RR quantum)
     char* infile = "in.txt";    // default value for -i
-    int outmode = 1;            // default value for -m
+    int outmode = 2; //1        // default value for -m
     char* outfile = NULL;       // default value for -o
-    // int t = 0, t1 = 0, t2 = 0, l = 0, l1 = 0, l2 = 0, pc = 0;    // default value for -r
+    int t = 200, t1 = 10, t2 = 1000, l = 100, l1 = 10, l2 = 500, pc = 10;    // default value for -r
 
     int opt;
+    bool is_random = false;
     // Receive arguments...
     while ((opt = getopt(argc, argv, "n:a:s:i:m:o:r:")) != -1)
     {
@@ -449,6 +485,9 @@ int main(int argc, char *argv[])
             case 'o':
                 outfile = optarg;
                 outmode = 0;
+            case 'r':
+                is_random = true;
+                    
 
                 break;
             default:
@@ -498,68 +537,70 @@ int main(int argc, char *argv[])
 
     pthread_mutex_init(&main_lock, NULL);
 
-    //BURST CREATION
+    //BURST CREATION WITH INFILE
     BurstNode* head = NULL;
     BurstNode* temp = NULL;
     int burst_length, arrival_time = 0;
+    if(strcmp(sap, "S") == 0 && !is_random)
+    {    
+        int pid = 1;
+        char *fileName = infile;
+        FILE * fp;
+        char * line = NULL;
+        size_t len = 0;
+        ssize_t read;
+        char *token = NULL;
+        fp = fopen(fileName, "r");
+        if (fp == NULL)
+            exit(EXIT_FAILURE);
 
-    int pid = 1;
-    char *fileName = infile;
-    FILE * fp;
-    char * line = NULL;
-    size_t len = 0;
-    ssize_t read;
-    char *token = NULL;
-    fp = fopen(fileName, "r");
-    if (fp == NULL)
-        exit(EXIT_FAILURE);
-
-    // Reading the file...
-    while ((read = getline(&line, &len, fp)) != -1)
-    {
-        char lie[len];
-        strcpy(lie, line);
-        token = strtok(lie, " ");
-
-        if (token != NULL && strcmp(token, "PL") == 0)
+        // Reading the file...
+        while ((read = getline(&line, &len, fp)) != -1)
         {
-            //printf("First word: %s\n", token);
-            token = strtok(NULL, " ");
-            //printf("Length: %s\n", token);
-            burst_length = atoi(token);
-            if(head == NULL)
+            char lie[len];
+            strcpy(lie, line);
+            token = strtok(lie, " ");
+
+            if (token != NULL && strcmp(token, "PL") == 0)
             {
-                push(&head, pid, burst_length, arrival_time);
-                temp = head;
-                pid++;
-            }   
-            else
+                //printf("First word: %s\n", token);
+                token = strtok(NULL, " ");
+                //printf("Length: %s\n", token);
+                burst_length = atoi(token);
+                if(head == NULL)
+                {
+                    push(&head, pid, burst_length, arrival_time);
+                    temp = head;
+                    pid++;
+                }   
+                else
+                {
+                    insert(temp, pid, burst_length, arrival_time);
+                    temp = temp->next;
+                    pid++;
+                }
+            }
+
+            if (token != NULL && strcmp(token, "IAT") == 0)
             {
-                insert(temp, pid, burst_length, arrival_time);
-                temp = temp->next;
-                pid++;
+                //printf("First word: %s\n", token);
+                token = strtok(NULL, " ");
+                //printf("Arrival time: %s\n", token);
+                arrival_time += atoi(token);
             }
         }
+        insert(temp, -1, 0, 0);    
+        fclose(fp);
+        if (line)
+            free(line);
 
-        if (token != NULL && strcmp(token, "IAT") == 0)
-        {
-            //printf("First word: %s\n", token);
-            token = strtok(NULL, " ");
-            //printf("Arrival time: %s\n", token);
-            arrival_time += atoi(token);
-        }
-    }
-    insert(temp, -1, 0, 0);    
-    fclose(fp);
-    if (line)
-        free(line);
+        printList(head);
+        printBursts(head);
+    }    
 
-    printList(head);
-    printBursts(head);
-
-    //MULTI QUEUE CREATION
+    //MULTI QUEUE CREATION WITH INFILE
     BurstNode* heads[n];
-    if(strcmp(sap, "M") == 0)
+    if(strcmp(sap, "M") == 0 && !is_random)
     {  
         BurstNode* tmp[n];  
         for(int i=0; i<n; i++)
@@ -672,6 +713,39 @@ int main(int argc, char *argv[])
         }   
     }
 
+    if(strcmp(sap, "S") == 0 && is_random)
+    {
+        int pid = 1;
+        arrival_time = 0;
+        int interarrival_time = 0;
+        for(int i = 0; i < pc; i++)
+        {
+            interarrival_time = 20;
+            if(i == 0)
+                interarrival_time = 0;
+
+            arrival_time += interarrival_time;
+            burst_length = random_generator(t, t1, t2);
+
+            if(head == NULL)
+            {
+                push(&head, pid, burst_length, arrival_time);
+                temp = head;
+                pid++;
+            }   
+            else
+            {
+                insert(temp, pid, burst_length, arrival_time);
+                temp = temp->next;
+                pid++;
+            }
+        
+        }    
+        insert(temp, -1, 0, 0);   
+        printList(head);
+        printBursts(head);
+    } 
+
     for(int i = 0; i < n; i++)
     {
         printf("for loop %d\n", i);
@@ -685,15 +759,12 @@ int main(int argc, char *argv[])
         args[i].sap = sap;
         args[i].qs = qs;
         args[i].q = q;
+        args[i].outmode = outmode;
 
         if(strcmp(sap, "S") == 0)
-        {
             args[i].burst = head;
-        }
         else if(strcmp(sap, "M") == 0)
-        {
             args[i].burst = heads[i];
-        }    
 
         create_thread = pthread_create(&threads[i], NULL, cpu_process, &args[i]);   
         if(create_thread) 
@@ -721,69 +792,6 @@ int main(int argc, char *argv[])
         }  
     } 
 
-    //SINGLE QUEUE APPROACH
-    if(strcmp(sap, "S") == 0)
-    {
-        printf("S");
-        //FIRST COME FIRST SERVED ALGORITHM
-        if(strcmp(alg, "FCF") == 0)
-        {
-
-        }
-
-        else if(strcmp(alg, "SJF") == 0)
-        {
-
-        }
-
-        else if(strcmp(alg, "RR") == 0)
-        {
-            BurstNode* temp;
-            bool dummy_item = false;
-            while(dummy_item)
-            {
-                //WE CAN PUT THAT CODE TO INSIDE A METHOD, OTHERWISE ALL CODES CAN BE CONFUSING
-                temp = head;
-                
-                dummy_item = true;
-
-                while( temp != NULL) 
-                {
-                    bool available_processor = false;
-                    //check processors respectively, until find an available processor
-                    //if not, wait until one of will be available
-                    while(!available_processor)
-                    {
-                        available_processor = true;
-                        for(int i = 0; i < n; i++)
-                        {
-                            // TO DO nasıl yapılacak bu kısım bilmiyorum
-                            // if it is available bunun kodu yazılacak
-                            if( available_processor)
-                            {
-                                if(temp->remaining_time > 20)
-                                    temp->remaining_time -= 20;
-                                else
-                                {
-                                    int elapsed_time = temp->remaining_time;
-                                    temp->remaining_time = 0;
-                                }
-
-                                break;
-                            }
-                        }
-                    }
-                    temp = temp->next;
-                    while(temp->remaining_time == 0 && temp != NULL)
-                        temp = temp->next;
-                }
-            }
-        }
-        else
-        {
-            // Error
-        }
-    }
 
     return 0;
 }
