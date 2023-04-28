@@ -84,9 +84,9 @@ void printList(struct BurstNode* head)
     }
 }
 
-void printBursts( struct BurstNode* head)
+void printBursts(struct BurstNode* head)
 {
-    if( head == NULL)
+    if(head == NULL)
         return;    
     int sum = 0;
     int counter = 0;
@@ -98,11 +98,11 @@ void printBursts( struct BurstNode* head)
         printf("pid\t cpu\t burstlen\t arv\t finish\t waitingtime\t turnaround\n");
         printf("%d\t %d\t %d\t\t %d\t %d\t %d\t\t %d\n", temp->pid, temp->cpu_id, temp->burst_length, temp->arrival_time,
                                                     temp->finish_time, (temp->turnaround_time - temp->burst_length), 
-                                                    temp->turnaround_time);
+                                                        temp->turnaround_time);
         temp = temp->next;
     }
     int average_turnaround_time = sum/counter;
-    printf("average turnaround time: %dms", average_turnaround_time);
+    printf("average turnaround time: %d ms", average_turnaround_time);
 
 }
 
@@ -218,10 +218,17 @@ void *cpu_process(void *args)
 
                 if(is_running)
                 {
-                    printf("pid\t cpu\t burstlen\t arv\t finish\t waitingtime\t turnaround\n");
-                    printf("%d\t %d\t %d\t\t %d\t %d\t %d\t\t %d\n", temp->pid, cpu_id, temp->burst_length, temp->arrival_time,
-                                                    temp->finish_time, waiting_time, 
-                                                    temp->turnaround_time); 
+                    if(outmode == 1)
+                    {
+                        // nothing
+                    }
+                    else if(outmode == 2)
+                        printf("time=%li, cpu=%d, pid=%d, burstlen=%d, remainingtime=%d\n", elapsed_ms, cpu_id, temp->pid, temp->burst_length, temp->arrival_time);
+                    else if(outmode == 3)  // EKLENECEKLER VAR
+                    {
+                        printf("time=%li, cpu=%d, pid=%d, burstlen=%d, remainingtime=%d\n", elapsed_ms, cpu_id, temp->pid, temp->burst_length, temp->arrival_time);
+                    }
+
                     usleep(length*1000);
                 }
 
@@ -310,10 +317,14 @@ void *cpu_process(void *args)
 
                 pthread_mutex_unlock(&(main_lock));
 
-                printf("pid\t cpu\t burstlen\t arv\t finish\t waitingtime\t turnaround\n");
-                printf("%d\t %d\t %d\t\t %d\t %d\t %d\t\t %d\n", min_node->pid, cpu_id, min_node->burst_length, min_node->arrival_time,
-                                                    min_node->finish_time, waiting_time, 
-                                                    min_node->turnaround_time); 
+                if(outmode == 1)
+                {
+                    // nothing
+                }
+                else if(outmode == 2)
+                    printf("time=%li, cpu=%d, pid=%d, burstlen=%d, remainingtime=%d\n", elapsed_ms, cpu_id, min_node->pid, min_node->burst_length, min_node->arrival_time);
+                else if(outmode == 3)  // EKLENECEKLER VAR
+                    printf("time=%li, cpu=%d, pid=%d, burstlen=%d, remainingtime=%d\n", elapsed_ms, cpu_id, min_node->pid, min_node->burst_length, min_node->arrival_time);
 
                 usleep(length*1000);
                 continue;
@@ -405,13 +416,16 @@ void *cpu_process(void *args)
 
                     if(is_running)
                     {
-                        if(outmode == 2)
-                        {    
-                        printf("pid\t cpu\t burstlen\t arv\t finish\t waitingtime\t turnaround\t remaining_time\n");
-                        printf("%d\t %d\t %d\t\t %d\t %d\t %d\t\t %d\t\t %d\n", temp->pid, cpu_id, temp->burst_length, temp->arrival_time,
-                                                        temp->finish_time, (temp->turnaround_time-temp->burst_length), 
-                                                        temp->turnaround_time, temp->remaining_time); 
+                        
+                        if(outmode == 1)
+                        {
+                            // nothing
                         }
+                        else if(outmode == 2)
+                            printf("time=%li, cpu=%d, pid=%d, burstlen=%d, remainingtime=%d\n", elapsed_ms, cpu_id, temp->pid, temp->burst_length, temp->arrival_time);
+                        else if(outmode == 3)  // EKLENECEKLER VAR
+                            printf("time=%li, cpu=%d, pid=%d, burstlen=%d, remainingtime=%d\n", elapsed_ms, cpu_id, temp->pid, temp->burst_length, temp->arrival_time);
+
     
                         usleep(length*1000);
                     }
@@ -540,7 +554,7 @@ int main(int argc, char *argv[])
     BurstNode* temp = NULL;
     int burst_length, arrival_time = 0;
     if(strcmp(sap, "S") == 0 && !is_random)
-    {    
+    {
         int pid = 1;
         char *fileName = infile;
         FILE * fp;
@@ -592,8 +606,8 @@ int main(int argc, char *argv[])
         if (line)
             free(line);
 
-        printList(head);
-        printBursts(head);
+        // printList(head);
+        // printBursts(head);
     } 
 
     else if(strcmp(sap, "S") == 0 && is_random)
@@ -625,8 +639,8 @@ int main(int argc, char *argv[])
         
         }    
         insert(temp, -1, 0, 0);   
-        printList(head);
-        printBursts(head);
+        // printList(head);
+        // printBursts(head);
     }    
 
     //MULTI QUEUE CREATION WITH INFILE
@@ -888,8 +902,7 @@ int main(int argc, char *argv[])
         {
             printBursts(heads[i]);
         }    
-    }    
-
+    }  
 
     return 0;
 }
