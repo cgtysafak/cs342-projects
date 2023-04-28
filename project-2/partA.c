@@ -179,7 +179,7 @@ void *cpu_process(void *args)
     gettimeofday(&start_time, NULL);
     long start_ms = start_time.tv_sec * 1000 + start_time.tv_usec / 1000;
 
-    if(strcmp(sap, "S") == 0)
+    if(strcmp(sap, "S") == 0  || strcmp(sap, "M") == 0 )
     {
         printf("S");
         //FIRST COME FIRST SERVED ALGORITHM
@@ -400,8 +400,6 @@ void *cpu_process(void *args)
                             //  start_time = (int)elapsed_ms;
                             temp->finish_time = (int)elapsed_ms + length;
                             temp->turnaround_time = temp->finish_time - temp->arrival_time;
-
-                            temp->finish_time = length;
                         }
                     }
 
@@ -441,7 +439,7 @@ void *cpu_process(void *args)
 int main(int argc, char *argv[])
 {
     int n = 2;                  // default value for -n
-    char* sap = "S";            // default value for -a
+    char* sap = "M"; //S            // default value for -a
     char* qs = "RM";            // default value for -a (multi-queue)
     char* alg = "RR";           // default value for -s
     int q = 20;                 // default value for -s (RR quantum)
@@ -451,7 +449,7 @@ int main(int argc, char *argv[])
     int t = 200, t1 = 10, t2 = 1000, l = 100, l1 = 10, l2 = 500, pc = 10;    // default value for -r
 
     int opt;
-    bool is_random = false;
+    bool is_random = true; //false
     // Receive arguments...
     while ((opt = getopt(argc, argv, "n:a:s:i:m:o:r:")) != -1)
     {
@@ -596,18 +594,52 @@ int main(int argc, char *argv[])
 
         printList(head);
         printBursts(head);
+    } 
+
+    else if(strcmp(sap, "S") == 0 && is_random)
+    {
+        int pid = 1;
+        arrival_time = 0;
+        int interarrival_time = 0;
+        for(int i = 0; i < pc; i++)
+        {
+            interarrival_time = random_generator(l, l1, l2);
+            if(i == 0)
+                interarrival_time = 0;
+
+            arrival_time += interarrival_time;
+            burst_length = random_generator(t, t1, t2);
+
+            if(head == NULL)
+            {
+                push(&head, pid, burst_length, arrival_time);
+                temp = head;
+                pid++;
+            }   
+            else
+            {
+                insert(temp, pid, burst_length, arrival_time);
+                temp = temp->next;
+                pid++;
+            }
+        
+        }    
+        insert(temp, -1, 0, 0);   
+        printList(head);
+        printBursts(head);
     }    
 
     //MULTI QUEUE CREATION WITH INFILE
     BurstNode* heads[n];
+    BurstNode* tmp[n];  
+    for(int i=0; i<n; i++)
+    {
+        heads[i] = NULL;
+        tmp[i] = NULL;
+    }  
+
     if(strcmp(sap, "M") == 0 && !is_random)
-    {  
-        BurstNode* tmp[n];  
-        for(int i=0; i<n; i++)
-        {
-            heads[i] = NULL;
-            tmp[i] = NULL;
-        }    
+    {    
         int burst_length = 0;
         int arrival_time = 0;
 
@@ -713,38 +745,93 @@ int main(int argc, char *argv[])
         }   
     }
 
-    if(strcmp(sap, "S") == 0 && is_random)
+    if(strcmp(sap, "M") == 0 && is_random)
     {
         int pid = 1;
-        arrival_time = 0;
+        int arrival_time = 0;
+        int burst_length = 0;
         int interarrival_time = 0;
-        for(int i = 0; i < pc; i++)
+        if(strcmp(qs, "RM") == 0)
         {
-            interarrival_time = 20;
-            if(i == 0)
-                interarrival_time = 0;
-
-            arrival_time += interarrival_time;
-            burst_length = random_generator(t, t1, t2);
-
-            if(head == NULL)
+            int index = 0;
+            for(int i=0; i<pc; i++)
             {
-                push(&head, pid, burst_length, arrival_time);
-                temp = head;
-                pid++;
-            }   
-            else
+                interarrival_time = random_generator(l, l1, l2);
+                if(i == 0)
+                    interarrival_time = 0;
+
+                arrival_time += interarrival_time;
+                burst_length = random_generator(t, t1, t2);
+
+                if(index >= n)
+                    index = index%n;
+
+
+                if(heads[index] == NULL)
+                {
+                    push(&heads[index], pid, burst_length, arrival_time);
+                    tmp[index] = heads[index];
+                    pid++;
+                }   
+                else
+                {
+                    insert(tmp[index], pid, burst_length, arrival_time);
+                    tmp[index] = tmp[index]->next;
+                    pid++;
+                }
+                index++;
+
+            }    
+        }  
+
+        if(strcmp(qs, "LM") == 0)
+        {
+            for(int i=0; i<pc; i++)
             {
-                insert(temp, pid, burst_length, arrival_time);
-                temp = temp->next;
-                pid++;
-            }
+
+                interarrival_time = random_generator(l, l1, l2);
+                if(i == 0)
+                    interarrival_time = 0;
+
+                arrival_time += interarrival_time;
+                burst_length = random_generator(t, t1, t2);
+
+
+                bool is_inserted = false;
+                for(int i=0; i<n; i++)
+                {    
+                    if(heads[i] == NULL)
+                    {
+                        push(&heads[i], pid, burst_length, arrival_time);
+                        tmp[i] = heads[i];
+                        is_inserted = true;
+                        pid++;
+                        break;
+                    }
+
+                }   
+                if(!is_inserted)
+                {
+                    int i = get_min_length(heads, n);    
+                    insert(tmp[i], pid, burst_length, arrival_time);
+                    tmp[i] = tmp[i]->next;
+                    pid++;
+                }
+            }        
+        } 
         
+
+    }    
+
+    //insert dummy item
+    if(strcmp(sap, "M") == 0 )
+    {
+        for(int i=0; i<n; i++)
+        {
+            if(tmp[i] == NULL)
+                insert(tmp[i], -1, 0, 0);  
         }    
-        insert(temp, -1, 0, 0);   
-        printList(head);
-        printBursts(head);
-    } 
+    }  
 
     for(int i = 0; i < n; i++)
     {
@@ -791,6 +878,17 @@ int main(int argc, char *argv[])
             printf("Processor: %d is succesfully finished\n", cpu_ids[i]);
         }  
     } 
+
+    if(outmode == 2 && strcmp(sap, "S") == 0)
+        printBursts(head);
+
+    if(outmode == 2 && strcmp(sap, "M") == 0)
+    {
+        for(int i=0; i<n; i++)
+        {
+            printBursts(heads[i]);
+        }    
+    }    
 
 
     return 0;
