@@ -127,34 +127,53 @@ int rm_request (int request[])
         }
     } 
 
+    // 
     bool is_request_valid = true;
 
     for(int i=0; i< M; i++)
     {
-        if(request[i] > AvailableRes[i])
+        if(request[i] > ExistingRes[i])
         {    
             is_request_valid = false;
             break;
         }
+    } 
 
-    }  
+    if(!is_request_valid) 
+        return -1;
 
-    int ret = 0;
+    while(true)
+    {    
+        bool is_request_available = true;
 
-    if(is_request_valid)
-    {
-        printf("thread %d request resources!! \n ", tid);
         for(int i=0; i< M; i++)
         {
-            AvailableRes[i] -= request[i];
-            RequestRes[tid][i] = request[i];
-            Allocation[tid][i] += request[i]; 
-        }    
-    } 
-    else
-        ret = -1;   
-    
-    return(ret);
+            if(request[i] > AvailableRes[i])
+            {    
+                is_request_available = false;
+                break;
+            }
+
+        } 
+
+        if(is_request_available)
+        {
+            pthread_mutex_lock(&lock);
+            printf("thread %d request resources!! \n ", tid);
+            for(int i=0; i< M; i++)
+            {
+                AvailableRes[i] -= request[i];
+                RequestRes[tid][i] += request[i];
+                Allocation[tid][i] += request[i]; 
+            } 
+            pthread_mutex_unlock(&lock);
+            return 0;   
+        } 
+        else
+            //return -1; //burayı sonradan değiştir
+            pthread_cond_wait(&cv, &lock);  
+        
+    }
 }
 
 int rm_release (int release[])
@@ -186,13 +205,16 @@ int rm_release (int release[])
 
     if(is_release_valid)
     {
+        pthread_mutex_lock(&lock);
         printf("thread %d release resources!! \n ", tid);
         for(int i=0; i< M; i++)
         {
             AvailableRes[i] += release[i];
             RequestRes[tid][i] -= release[i];
             //Allocation[tid][i] += request[i]; 
-        }    
+        }
+        pthread_mutex_unlock(&lock); 
+        pthread_cond_signal(&cv);   
     } 
     else
         ret = -1;  
@@ -265,7 +287,7 @@ int rm_detection()
     for(int i=0; i<N; i++)
     {
         if(finish[i] == false)
-            ret = 0; 
+            ret = 1; 
     }    
 
     return (ret);
@@ -343,7 +365,6 @@ void rm_print_state (char hmsg[])
     {
         //TO DO
     }    
-
 
     return;
 }
