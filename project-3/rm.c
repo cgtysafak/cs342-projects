@@ -127,7 +127,6 @@ int rm_request (int request[])
         }
     } 
 
-    // 
     bool is_request_valid = true;
 
     for(int i=0; i< M; i++)
@@ -142,38 +141,46 @@ int rm_request (int request[])
     if(!is_request_valid) 
         return -1;
 
-    while(true)
+    if(DA == 0)
     {    
-        bool is_request_available = true;
+        while(true)
+        {    
+            bool is_request_available = true;
 
-        for(int i=0; i< M; i++)
-        {
-            if(request[i] > AvailableRes[i])
-            {    
-                is_request_available = false;
-                break;
-            }
-
-        } 
-
-        if(is_request_available)
-        {
-            pthread_mutex_lock(&lock);
-            printf("thread %d request resources!! \n ", tid);
             for(int i=0; i< M; i++)
             {
-                AvailableRes[i] -= request[i];
-                RequestRes[tid][i] += request[i];
-                Allocation[tid][i] += request[i]; 
+                if(request[i] > AvailableRes[i])
+                {    
+                    is_request_available = false;
+                    break;
+                }
+
             } 
-            pthread_mutex_unlock(&lock);
-            return 0;   
-        } 
-        else
-            //return -1; //burayı sonradan değiştir
-            pthread_cond_wait(&cv, &lock);  
-        
+
+            if(is_request_available)
+            {
+                pthread_mutex_lock(&lock);
+                printf("thread %d request resources!! \n ", tid);
+                for(int i=0; i< M; i++)
+                {
+                    AvailableRes[i] -= request[i];
+                    RequestRes[tid][i] += request[i];
+                    Allocation[tid][i] += request[i]; 
+                } 
+                pthread_mutex_unlock(&lock);
+                return 0;   
+            } 
+            else
+                //return -1; //burayı sonradan değiştir
+                pthread_cond_wait(&cv, &lock);  
+            
+        }
     }
+    
+    else if(DA== 1)
+    {
+        //TO DO
+    }    
 }
 
 int rm_release (int release[])
