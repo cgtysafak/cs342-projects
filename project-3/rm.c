@@ -34,10 +34,108 @@ pthread_cond_t cv;
 
 // end of global variables
 
+// NEW METHOD FOR SAFETY CHECKING ALGORITHM
+bool is_safe(int request[], int tid)
+{
+    int work[M];
+    bool finish[N];
+    int tempNeed[N][M];
+
+    for(int i=0; i<M; i++)
+    {
+        work[i] = AvailableRes[i] - request[i];
+    } 
+
+    for(int i=0; i<N; i++)
+        finish[i] = false;
+
+    for(int i = 0; i<N; i++)
+    {
+        for(int j=0; j<M; j++)
+        {
+            tempNeed[i][j] = Need[i][j];
+        } 
+    }
+
+    for(int i=0; i<M; i++)
+        tempNeed[tid][i] -= request[i];
+
+
+    for(int i=0; i<N; i++)
+    {
+        finish[i] = true; 
+        for(int j=0; j<M; j++)
+        {
+            if(tempNeed[i][j] > 0)
+            {    
+                finish[i] = false;
+                break;
+            }
+        }
+
+        if(finish[i] == true)
+        {    
+            for(int j=0; j<M; j++)
+            {
+                if(i == tid)
+                    work[j] += request[j];    
+                work[j] += Allocation[i][j]; 
+            } 
+        }
+    } 
+
+    bool is_process_finished = false;
+    while(!is_process_finished)
+    {
+        for(int i=0; i<N; i++)
+        {
+            is_process_finished = true;
+            if(finish[i] == false)
+            {
+                bool is_request_less_than_aval = true;
+                for(int j=0; j<M; j++)
+                {
+                    if(tempNeed[i][j] > work[j])
+                    {   
+                        is_request_less_than_aval = false; 
+                        break;
+                    }
+                } 
+
+                if(is_request_less_than_aval)
+                {
+                    is_process_finished = false;
+                    for(int k=0; k<M; k++)
+                    {
+                        if(i == tid)
+                            work[k] += request[k];
+                        work[k] += Allocation[i][k];
+                    }
+                    printf("finished thread is: %d\n", i) ;   
+                    finish[i] = true;
+                }
+            }
+        }
+    } 
+
+    for(int i=0; i<N; i++)
+    {    
+        if(finish[i] == false)
+        {
+            printf("this request is not safe for %d, i = %d\n", tid, i);
+            rm_print_state("nom");
+            return false;
+        }  
+    }  
+
+    printf("this request is safe\n");    
+    return true;
+}
+
 int rm_thread_started(int tid)
 {
     int ret = 0;
-    printf("self id: %d\n", pthread_self());
+    printf("self id: %ld\n", pthread_self());
     map_tid[tid] = pthread_self();
     is_alive[tid] = true;
     return (ret);
@@ -65,6 +163,29 @@ int rm_thread_ended()
 int rm_claim (int claim[])
 {
     int ret = 0;
+    if(DA == 0)
+        return (ret);
+
+    int tid;
+    for(int i=0; i<N; i++)
+    {
+        if(pthread_self() == map_tid[i])
+        {    
+            tid = i;
+            break;
+
+        }
+    } 
+
+    for(int i = 0; i<M; i++)
+    {
+        if(claim[i] > ExistingRes[i])
+            return -1;
+
+        MaxDemand[tid][i] = claim[i];
+        Need[tid][i] = claim[i];
+    }  
+
     return(ret);
 }
 
@@ -142,7 +263,8 @@ int rm_request (int request[])
         return -1;
 
     if(DA == 0)
-    {    
+    {
+        pthread_mutex_lock(&lock);    
         while(true)
         {    
             bool is_request_available = true;
@@ -156,10 +278,9 @@ int rm_request (int request[])
                 }
 
             } 
-
             if(is_request_available)
             {
-                pthread_mutex_lock(&lock);
+                //pthread_mutex_lock(&lock);     //lockların yerini değiştirdim cünkü update olduğunda sıkıntı olmasın
                 printf("thread %d request resources!! \n ", tid);
                 for(int i=0; i< M; i++)
                 {
@@ -171,8 +292,11 @@ int rm_request (int request[])
                 return 0;   
             } 
             else
+            {   
                 //return -1; //burayı sonradan değiştir
+                pthread_mutex_unlock(&lock);
                 pthread_cond_wait(&cv, &lock);  
+            }
             
         }
     }
@@ -180,7 +304,46 @@ int rm_request (int request[])
     else if(DA== 1)
     {
         //TO DO
-    }    
+        pthread_mutex_lock(&lock);    
+        while(true)
+        {    
+            bool is_request_available = true;
+
+            for(int i=0; i< M; i++)
+            {
+                if(request[i] > AvailableRes[i])
+                {    
+                    is_request_available = false;
+                    break;
+                }
+
+            } 
+            if(is_request_available)
+            {
+                if(is_safe(request, tid))
+                {
+                    printf("thread %d request resources!! \n ", tid);
+                    for(int i=0; i< M; i++)
+                    {
+                        AvailableRes[i] -= request[i];
+                        RequestRes[tid][i] += request[i];
+                        Allocation[tid][i] += request[i]; 
+                        Need[tid][i] -= request[i];
+                    } 
+                    pthread_mutex_unlock(&lock);
+                    return 0;
+                }        
+            }
+
+            else
+                printf("resources are not available for %d\n", tid);
+
+            pthread_mutex_unlock(&lock);
+            pthread_cond_wait(&cv, &lock);      
+        }        
+        return 0;
+    }  
+    return -1;  
 }
 
 int rm_release (int release[])
@@ -218,7 +381,7 @@ int rm_release (int release[])
         {
             AvailableRes[i] += release[i];
             RequestRes[tid][i] -= release[i];
-            //Allocation[tid][i] += request[i]; 
+            Allocation[tid][i] -= release[i]; 
         }
         pthread_mutex_unlock(&lock); 
         pthread_cond_signal(&cv);   
@@ -242,7 +405,7 @@ int rm_detection()
 
     for(int i=0; i<N; i++)
     {
-        bool is_finished = true; 
+        finish[i] = true; 
         for(int j=0; j<M; j++)
         {
             if(RequestRes[i][j] != 0)
@@ -291,13 +454,14 @@ int rm_detection()
         }    
     } 
 
+    int number_of_deadlocks = 0;
     for(int i=0; i<N; i++)
     {
         if(finish[i] == false)
-            ret = 1; 
+            number_of_deadlocks+=1; 
     }    
 
-    return (ret);
+    return (number_of_deadlocks);
 }
 
 
@@ -338,7 +502,7 @@ void rm_print_state (char hmsg[])
 
     for(int i=0; i<M; i++)
     {
-        printf("R%d ", i);
+        printf("   R%d ", i);
     } 
 
     for(int i=0; i<N; i++)
@@ -355,7 +519,7 @@ void rm_print_state (char hmsg[])
 
     for(int i=0; i<M; i++)
     {
-        printf("R%d ", i);
+        printf("   R%d ", i);
     } 
 
     for(int i=0; i<N; i++)
@@ -371,7 +535,48 @@ void rm_print_state (char hmsg[])
     if(DA == 1)
     {
         //TO DO
+        //max demand 
+            //REQUEST 
+        printf("\nMAX DEMAND:\n");
+
+        for(int i=0; i<M; i++)
+        {
+            printf("   R%d ", i);
+        } 
+
+        for(int i=0; i<N; i++)
+        {
+            printf("\nT%d: ", i);
+            for(int j=0; j<M; j++)
+            {
+                printf("%d  ", MaxDemand[i][j]);
+            }    
+        }
+
+        //NEED 
+        printf("\nNeed:\n");
+
+        for(int i=0; i<M; i++)
+        {
+            printf("   R%d ", i);
+        } 
+
+        for(int i=0; i<N; i++)
+        {
+            printf("\nT%d: ", i);
+            for(int j=0; j<M; j++)
+            {
+                printf("%d  ", Need[i][j]);
+            }    
+        } 
+
+        printf("\n------------------------------------------\n");
+
+
     }    
 
     return;
 }
+
+
+
