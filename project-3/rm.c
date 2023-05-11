@@ -87,9 +87,10 @@ bool is_safe(int request[], int tid)
     bool is_process_finished = false;
     while(!is_process_finished)
     {
+        is_process_finished = true;
         for(int i=0; i<N; i++)
         {
-            is_process_finished = true;
+            //printf("for loop thread is: %d\n", i); 
             if(finish[i] == false)
             {
                 bool is_request_less_than_aval = true;
@@ -111,7 +112,12 @@ bool is_safe(int request[], int tid)
                             work[k] += request[k];
                         work[k] += Allocation[i][k];
                     }
-                    printf("finished thread is: %d\n", i) ;   
+                    /* printf("finished thread is: %d\n", i); 
+                    for(int l = 0; l<M; l++)
+                    {
+                        printf("%d  ", work[l]);
+                    }  
+                    printf("\n");   */
                     finish[i] = true;
                 }
             }
@@ -123,19 +129,19 @@ bool is_safe(int request[], int tid)
         if(finish[i] == false)
         {
             printf("this request is not safe for %d, i = %d\n", tid, i);
-            rm_print_state("nom");
+            //rm_print_state("nom");
             return false;
         }  
     }  
 
-    printf("this request is safe\n");    
+    printf("this request is safe for thread %d\n", tid);    
     return true;
 }
 
 int rm_thread_started(int tid)
 {
     int ret = 0;
-    printf("self id: %ld\n", pthread_self());
+    //printf("self id: %ld\n", pthread_self());
     map_tid[tid] = pthread_self();
     is_alive[tid] = true;
     return (ret);
@@ -264,7 +270,10 @@ int rm_request (int request[])
 
     if(DA == 0)
     {
-        pthread_mutex_lock(&lock);    
+        pthread_mutex_lock(&lock);
+        for(int i=0; i< M; i++)
+            RequestRes[tid][i] += request[i]; 
+
         while(true)
         {    
             bool is_request_available = true;
@@ -285,7 +294,7 @@ int rm_request (int request[])
                 for(int i=0; i< M; i++)
                 {
                     AvailableRes[i] -= request[i];
-                    RequestRes[tid][i] += request[i];
+                    RequestRes[tid][i] -= request[i];
                     Allocation[tid][i] += request[i]; 
                 } 
                 pthread_mutex_unlock(&lock);
@@ -304,7 +313,10 @@ int rm_request (int request[])
     else if(DA== 1)
     {
         //TO DO
-        pthread_mutex_lock(&lock);    
+        pthread_mutex_lock(&lock); 
+        for(int i=0; i< M; i++)
+            RequestRes[tid][i] += request[i];  
+
         while(true)
         {    
             bool is_request_available = true;
@@ -326,9 +338,9 @@ int rm_request (int request[])
                     for(int i=0; i< M; i++)
                     {
                         AvailableRes[i] -= request[i];
-                        RequestRes[tid][i] += request[i];
                         Allocation[tid][i] += request[i]; 
                         Need[tid][i] -= request[i];
+                        RequestRes[tid][i] -= request[i];
                     } 
                     pthread_mutex_unlock(&lock);
                     return 0;
@@ -365,7 +377,7 @@ int rm_release (int release[])
 
     for(int i=0; i< M; i++)
     {
-        if(release[i] > RequestRes[tid][i])
+        if(release[i] > Allocation[tid][i])
         {    
             is_release_valid = false;
             break;
@@ -380,7 +392,7 @@ int rm_release (int release[])
         for(int i=0; i< M; i++)
         {
             AvailableRes[i] += release[i];
-            RequestRes[tid][i] -= release[i];
+            //RequestRes[tid][i] -= release[i];
             Allocation[tid][i] -= release[i]; 
         }
         pthread_mutex_unlock(&lock); 
@@ -425,9 +437,7 @@ int rm_detection()
                             //requesti < worki exist while loop
         for(int i=0; i<N; i++)
         {
-            if(finish[i] == true)
-                continue;
-            else
+            if(finish[i] == false)
             {
                 bool is_request_less_than_aval = true;
                 for(int j=0; j<M; j++)
@@ -435,6 +445,7 @@ int rm_detection()
                     if(RequestRes[i][j] > work[j])
                     {
                         is_request_less_than_aval = false;
+                        break;
                     }    
 
                 }
