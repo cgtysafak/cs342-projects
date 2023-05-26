@@ -9,40 +9,26 @@
 
 int main(int argc, char *argv[])
 {
-    int opt;
 	char *command = "";
 	
 	if (argc > 2)
 	{
         command = argv[1];
+        printf("Command: %s\n", command);
+        printf("argc: %d\n", argc);
 	}
 	
-	if (strcmp(command, "-freefc") == 0)
+	if (strcmp(command, "-frameinfo") == 0)
 	{
-        if (argc != 4) {
-            printf("Usage: %s -freefc <PFN1> <PFN2>\n", argv[0]);
-            return 1;
-        }
-        
-        unsigned long PFN1 = strtoul(argv[2], NULL, 0);
-        unsigned long PFN2 = strtoul(argv[3], NULL, 0);
-        
-        // Handle -freefc command with PFN1 and PFN2
-        printf("Command: -freefc\nPFN1: %lu\nPFN2: %lu\n", PFN1, PFN2);
-		
-        // TODO
-    }
-	else if (strcmp(command, "-frameinto") == 0)
-	{
-        if (argc != 3) {
-            printf("Usage: %s -frameinto <PFN>\n", argv[0]);
-            return 1;
-        }
+        // if (argc != 3) {
+        //     printf("Usage: %s -frameinto <PFN>\n", argv[0]);
+        //     return 1;
+        // }
         
         unsigned long PFN = strtoul(argv[2], NULL, 0);
         
         // Handle -frameinto command with PFN
-        printf("Command: -frameinto\nPFN: %lu\n", PFN);
+        printf("Command: -frameinfo\nPFN: %lu\n", PFN);
 		
         // TODO
     }
