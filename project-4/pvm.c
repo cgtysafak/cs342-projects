@@ -92,6 +92,7 @@ int main(int argc, char *argv[])
         char filePath[256];
         snprintf(filePath, sizeof(filePath), "/proc/%lu/maps", PID);
         FILE *file = fopen(filePath, "r");
+        FILE *file_ctrl = fopen(filePath, "r");
 
         // maps check
         if(file == NULL) {
@@ -110,12 +111,20 @@ int main(int argc, char *argv[])
 
         // calculate the memory usage line by line
         char line[256];
+        int noOfLines = 0;
         unsigned long totalMemoryUsage = 0;
         unsigned long totalPhysUsage = 0;
         unsigned long exclusivePhysUsage = 0;
+
+        while (fgets(line, sizeof(line), file_ctrl) != NULL) {noOfLines++;}
+
+		printf("NO OF LINES = %d\n\n", noOfLines);
+
+		int ctrl = 0;
         while (fgets(line, sizeof(line), file) != NULL)
         {
-            unsigned long startAddress, endAddress, entry, offset;
+        	++ctrl;
+            unsigned long startAddress, endAddress, entry_pagemap, entry_kpagecount, offset_pagemap, offset_kpagecount;
 
             // Extract start and end addresses from the line
             sscanf(line, "%lx-%lx", &startAddress, &endAddress);
@@ -125,56 +134,62 @@ int main(int argc, char *argv[])
 
             totalMemoryUsage += memoryUsage;
 
+            if (ctrl == noOfLines)
+            	break;
+
             // Calculate the PFN from VPN
-            unsigned long VPN = startAddress / 4096;
+            unsigned long VPN_start = startAddress / 4096;
+            unsigned long VPN_end = endAddress / 4096;
 
             char pagemapPath[256];
             snprintf(pagemapPath, sizeof(pagemapPath), "/proc/%lu/pagemap", PID);
             
-            int fd = open(pagemapPath, O_RDONLY);
-            if(fd == -1 ) {
+            int pagemap = open(pagemapPath, O_RDONLY);
+            if(pagemap == -1 ) {
                 perror("Error opening pagemap");
                 return 1;
             }
 
-            offset = sizeof(unsigned long) * VPN;
-            lseek(fd, offset, SEEK_CUR);
-            read(fd, &entry, sizeof(unsigned long));
-
-            unsigned long mask_PFN = (1UL << 55)-1;
-            unsigned long PFN = entry & mask_PFN;
-            unsigned long present_bit = (entry >> 63) & 1;
-
-            // printf("VPN = %lu\tEntry = %lu\tPFN = %lu\tpresent = %lu\n", VPN, entry, PFN, present_bit);
-
-            // AAAAAAAAAAAAAAAAAAAAAAA
-            int fd2 = open("/proc/kpagecount", O_RDONLY);
-			if(fd2 == -1 ) {
+			int kpagecount = open("/proc/kpagecount", O_RDONLY);
+			if(kpagecount == -1 ) {
 			    perror("Error opening /proc/kpagecount");
 			    return 1;
 			}
 
-			off_t offset2 = 8*PFN;
-		    uint64_t entry2;
+            for(unsigned long i = VPN_start; i <= VPN_end; ++i)
+            {
+				offset_pagemap = sizeof(unsigned long) * i;
+				lseek(pagemap, offset_pagemap, SEEK_CUR);
+				read(pagemap, &entry_pagemap, sizeof(unsigned long));
 
-            lseek(fd2, offset2, SEEK_SET);
-            read(fd2, &entry2, sizeof(unsigned long));
+				unsigned long mask_PFN = (1UL << 55)-1;
+				unsigned long PFN = entry_pagemap & mask_PFN;
+				unsigned long present_bit = (entry_pagemap >> 63) & 1;
 
-            if (entry2 == 1 && present_bit != 0)
-            	exclusivePhysUsage += memoryUsage;
-            if (entry2 >= 1 && present_bit != 0)
-            	totalPhysUsage += memoryUsage;
+				if (present_bit == 0)
+					continue;
+
+				// printf("VPN_start = %lu\tVPN_end = %lu\tEntry = %lu\tPFN = %lu\tpresent = %lu\n", VPN_start, VPN_end, entry_pagemap, PFN, present_bit);
+
+				offset_kpagecount = 8*PFN;
+
+				lseek(kpagecount, offset_kpagecount, SEEK_CUR);
+				read(kpagecount, &entry_kpagecount, sizeof(unsigned long));
+
+				if (entry_kpagecount == 1 && present_bit != 0)
+					exclusivePhysUsage += 4096;
+				if (entry_kpagecount >= 1 && present_bit != 0)
+					totalPhysUsage += 4096;
+            }
 
             // printf("%s\n", line);
         }
 
-        printf("Total virtual memory usage: %lu KBs\n", (totalMemoryUsage/1024));
-        printf("Total physical memory usage: %lu KBs\n", (totalPhysUsage/1024));
-        printf("Exclusive physical memory usage: %lu KBs\n", (exclusivePhysUsage/1024));
+        printf("Total virtual memory usage: %lu KB\n", (totalMemoryUsage/1024));
+        printf("Total physical memory usage: %lu KB\n", (totalPhysUsage/1024));
+        printf("Exclusive physical memory usage: %lu KB\n", (exclusivePhysUsage/1024));
 
         fclose(file);
-
-        // ------------------------
     }
 	else if (strcmp(command, "-mapva") == 0)
 	{
