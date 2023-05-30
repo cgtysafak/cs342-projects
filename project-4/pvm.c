@@ -29,16 +29,55 @@ int main(int argc, char *argv[])
 
 	if (strcmp(command, "-frameinfo") == 0)
 	{
+            unsigned long PFN = strtoul(argv[2], NULL, 0);
+            printf("For frame 0x%016lX:\n\n", PFN);
 
-        // if (argc != 3) {
-        //     printf("Usage: %s -frameinto <PFN>\n", argv[0]);
-        //     return 1;
-        // }
-        //int fd, fd2;
+            int fd = open("/proc/kpageflags", O_RDONLY);
+	    if(fd == -1 ) {
+	        perror("Error opening /proc/kpageflags");
+	        return 1;
+	    }
+	    
+	    //constant string array for flag names
+	    const char* flag_names[26] = { "LOCKED", "ERROR", "REFERENCED","UPTODATE",  "DIRTY",           
+		                               "LRU"   , "ACTIVE", "SLAB",     "WRITEBACK", "RECLAIM",         
+		                               "BUDDY" , "MMAP",   "ANON",     "SWAPCACHE", "SWAPBACKED",      
+		                               "COMPOUND_HEAD", "COMPOUND_TAIL", "HUGE", "UNEVICTABLE", "HWPOISON",        
+		                               "NOPAGE", "KSM", "THP", "BALLOON", "ZERO_PAGE",      
+		                               "IDLE" };
+	    
+	    off_t offset = 8*PFN;
+	    uint64_t entry;
+	    
+	    uint64_t mask = (1ULL << 26) -1; //to get least 26 significant bits
+	    uint64_t last_26_bits = 0;
+	    
 
-        unsigned long PFN = strtoul(argv[2], NULL, 0);
-        printf("%lu", PFN);
-    }
+	    if(lseek(fd, offset, SEEK_CUR) == -1)
+	    {
+	    	perror("Error seeking in /proc/pageflags");
+	    	close(fd);
+	    	return 1;
+	    }
+
+	    if(read(fd, &entry, sizeof(uint64_t)) != sizeof(uint64_t)) 
+	    {
+	    	perror("Error reading /proc/pageflags");
+	    	close(fd);
+	    	return 1;
+	    }
+
+	    last_26_bits = entry & mask;
+
+	    //i represents bit position
+	    for (int i = 0; i < 26; i++) {
+	        uint64_t mask = 1ULL << i;  
+
+	        uint64_t bit = (last_26_bits & mask) >> i; 
+
+	        printf("%d.%s: %lu\n", i, flag_names[i], bit); //print each bit for flag values respectively
+	    }
+    	}
 	else if (strcmp(command, "-memused") == 0)
     {
         if (argc != 3) {
