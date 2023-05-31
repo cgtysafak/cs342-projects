@@ -241,12 +241,17 @@ int main(int argc, char *argv[])
         lseek(pagemap_file, offset, SEEK_CUR);
         read(pagemap_file, &entry, ENTRY_SIZE);
 
-        unsigned long long PFN = entry & 0x7FFFFFFFFFFFFF;
+        unsigned long present_bit = (entry >> 63) & 1;
+        if (present_bit == 0) {
+            printf("\nnot-in-memory");
+        } else {
+            unsigned long long PFN = entry & 0x7FFFFFFFFFFFFF;
 
-        unsigned long long physical_address = (PFN * PAGE_SIZE) + (VA % PAGE_SIZE);  
+            unsigned long long physical_address = (PFN * PAGE_SIZE) + (VA % PAGE_SIZE);  
 
-        printf("\nPA: 0x%016llx\n", physical_address);
-        printf("\nPFN: 0x%09llx\n", PFN);
+            printf("\nPA: 0x%016llx", physical_address);
+            printf("\nPFN: 0x%09llx\n", PFN);
+        }
 
         return 0;
     }
