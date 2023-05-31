@@ -512,7 +512,75 @@ int main(int argc, char *argv[])
         // Handle -alltablesize command with PID
         printf("Command: -alltablesize\nPID: %lu\n", PID);
 		
-        // TODO
+        char file_path[256];
+        snprintf(file_path, sizeof(file_path), "/proc/%lu/maps", PID);
+        FILE* file = fopen(file_path, "r");
+
+        if (file == NULL) {
+            printf("ERROR: File could not be opened. Path: %s\n", file_path);
+            return 1;
+        }
+
+		int level2[512];
+		int level3[512];
+		int level4[512];
+
+        char line[256];
+        while (fgets(line, sizeof(line), file) != NULL) {
+			unsigned long start_address, end_address, vpn;
+
+            // Extract start and end addresses from the line
+            sscanf(line, "%lx-%lx", &start_address, &end_address);
+
+            // Calculate the VPN range
+            unsigned long vpn_start = start_address << 16; // Remove unused part
+			vpn_start = vpn_start >> 28; // Recover unused part length + remove page offset
+
+			unsigned long vpn_end = end_address << 16; // Remove unused part
+			vpn_end = vpn_end >> 28; // Recover unused part length + remove page offset
+
+			// XXXX XXXX XXXX XXXX 000 000 000, 000 000 000, 000 000 000, 000 000 000, XXXX XXXX XXXX
+            for (vpn = vpn_start; vpn < vpn_end; vpn++) {
+				unsigned long level2identifier = (vpn >> (9*3)) & 0x1FF;
+				unsigned long level3identifier = (vpn >> (9*2)) & 0x1FF;
+				unsigned long level4identifier = (vpn >> (9*1)) & 0x1FF;
+
+				level2[level2identifier] = 1;
+				level3[level3identifier] = 1;
+				level4[level4identifier] = 1;
+            }
+		}
+
+		int level1count = 1;
+
+		int level2count = 0;
+		for (int i = 0; i < 512; i++) {
+            if (level2[i] == 1) {
+                ++level2count;
+            }
+		}
+
+		int level3count = 0;
+		for (int i = 0; i < 512; i++) {
+			if (level3[i] == 1) {
+                ++level3count;
+            }
+		}
+
+		int level4count = 0;
+		for (int i = 0; i < 512; i++) {
+			if (level4[i] == 1) {
+                ++level4count;
+            }
+		}
+
+		int totalFrames = level1count + level2count + level3count + level4count;
+		int totalKB = totalFrames * 4;
+
+		printf("(pid=%lu) total memory occupied by 4-level page table: %d KB (%d frames)\n", PID, totalKB, totalFrames);
+		printf("(pid=%lu) number of page tables used: level1=%d, level2=%d, level3=%d, level4=%d\n", PID, level1count, level2count, level3count, level4count);
+
+        fclose(file);
     }
 
     printf("Done!\n");
