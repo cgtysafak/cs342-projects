@@ -324,7 +324,97 @@ int main(int argc, char *argv[])
         // Handle -mapall command with PID
         printf("Command: -mapall\nPID: %lu\n", PID);
 		
-        // TODO
+		// read the file
+        char filePath[256];
+        snprintf(filePath, sizeof(filePath), "/proc/%lu/maps", PID);
+        FILE* file = fopen(filePath, "r");
+
+        // maps file check
+        if (file == NULL) {
+            printf("ERROR: File not found. Path: %s\n", filePath);
+            return 1;
+        }
+
+		uintptr_t start_addr, end_addr;
+		unsigned long long offset;
+		char permissions[5];
+		int dev_major, dev_minor, inode;
+		char pathname[256];
+
+		while (fscanf(file, "%lx-%lx %s %llx %x:%x %d",
+			&start_addr,
+			&end_addr,
+			permissions,
+			&offset,
+			&dev_major,
+			&dev_minor,
+			&inode
+		) != EOF) {
+        	char *result = "unused";
+        	unsigned long result_VPN = i;
+        	unsigned long result_PFN = 0;
+        	bool in_memory = false;
+        	char line[256];
+	        while ((fgets(line, sizeof(line), file) != NULL) && !in_memory) {
+	        	unsigned long startAddress, endAddress, entry_pagemap, entry_kpagecount, offset_pagemap, offset_kpagecount;
+
+	        	// Extract start and end addresses from the line
+	        	sscanf(line, "%lx-%lx", &startAddress, &endAddress);
+
+	            // Calculate the PFN from VPN
+	            unsigned long VPN_start = startAddress / 4096;
+	            unsigned long VPN_end = endAddress / 4096;
+
+	            if (i < VPN_start || i > VPN_end) {
+	            	// continue;
+	            }
+	            else {
+	            	char pagemapPath[256];
+		            snprintf(pagemapPath, sizeof(pagemapPath), "/proc/%lu/pagemap", PID);
+
+		            int pagemap = open(pagemapPath, O_RDONLY);
+		            if(pagemap == -1 ) {
+		                perror("ERROR: Could not open pagemap");
+		                return 1;
+		            }
+
+					int kpagecount = open("/proc/kpagecount", O_RDONLY);
+					if(kpagecount == -1 ) {
+					    perror("ERROR: Could not open /proc/kpagecount");
+					    return 1;
+					}
+
+					offset_pagemap = sizeof(unsigned long) * i;
+					lseek(pagemap, offset_pagemap, SEEK_CUR);
+					read(pagemap, &entry_pagemap, sizeof(unsigned long));
+
+					unsigned long mask_PFN = (1UL << 55)-1;
+					unsigned long PFN = entry_pagemap & mask_PFN;
+					unsigned long present_bit = (entry_pagemap >> 63) & 1;
+
+					if (present_bit == 0)
+					{
+						result = "not-in-memory";
+					}
+					else
+					{
+						offset_kpagecount = 8*PFN;
+					
+						lseek(kpagecount, offset_kpagecount, SEEK_CUR);
+						read(kpagecount, &entry_kpagecount, sizeof(unsigned long));
+	
+						if (entry_kpagecount == 0)
+							result = "not-in-memory";
+						else
+						{
+							in_memory = true;
+							result_PFN = PFN;
+						}
+					}
+	            }
+	        }
+			
+			printf("VPN = %lu PFN = %lu %s\n", result_VPN, result_PFN, result);
     }
 	else if (strcmp(command, "-mapallin") == 0)
 	{
