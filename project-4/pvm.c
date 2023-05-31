@@ -303,7 +303,7 @@ int main(int argc, char *argv[])
             }    
 
         }    
-
+	printf("Virtual address 0x%016lX: cannot be found for PID: %lu\n", VA, PID);
     }
 	else if (strcmp(command, "-maprange") == 0)
 	{
