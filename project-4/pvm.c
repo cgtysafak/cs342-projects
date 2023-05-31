@@ -302,8 +302,9 @@ int main(int argc, char *argv[])
                 return 0;      
             }    
 
-        }    
-	printf("Virtual address 0x%016lX: cannot be found for PID: %lu\n", VA, PID);
+        }
+        
+	    printf("Virtual address 0x%016lX: cannot be found for PID: %lu\n", VA, PID);
     }
 	else if (strcmp(command, "-maprange") == 0)
 	{
@@ -400,11 +401,11 @@ int main(int argc, char *argv[])
 	            }
 	        }
 		
-		if (in_memory)
-                	printf("VPN = 0x%016lX PFN = 0x%016lX\n", result_VPN, result_PFN);
-            	else
-                	printf("VPN = 0x%016lX %s\n", result_VPN, result);
-	}
+            if (in_memory)
+                printf("VPN = 0x%016lX PFN = 0x%016lX\n", result_VPN, result_PFN);
+            else
+                printf("VPN = 0x%016lX %s\n", result_VPN, result);
+        }
 	}
 	else if (strcmp(command, "-mapall") == 0)
 	{
