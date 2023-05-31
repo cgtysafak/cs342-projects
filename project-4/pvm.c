@@ -15,6 +15,9 @@
 
 #define PFN_MASK ((1ULL << 55) - 1)
 #define PAGE_SIZE 4096
+#define ENTRY_SIZE 8 // 64 bits
+#define LEVEL_OFFSET_BITS 9
+#define LEVEL_ENTRIES (1ULL << LEVEL_OFFSET_BITS) //1000000000 - 1 = 0111111111
 
 int main(int argc, char *argv[])
 {
@@ -194,8 +197,57 @@ int main(int argc, char *argv[])
         
         // Handle -mapva command with PID
         printf("Command: -mapva\nPID: %lu\nVA: %lu\n", PID, VA);
-		
-        // TODO
+
+        // Open the maps file
+        char maps_file_path[256];
+        snprintf(maps_file_path, sizeof(maps_file_path), "/proc/%lu/maps", PID);
+
+        FILE *maps_file = fopen(maps_file_path, "r");
+        if (maps_file == NULL) {
+            perror("Cannot open maps file");
+            return 1;
+        }
+
+        unsigned long start_address, end_address;
+
+        char line[256];
+        while (fgets(line, sizeof(line), maps_file) != NULL) {
+            // printf("\n line %s", line);
+            // Extract start and end addresses from the line
+            sscanf(line, "%lx-%lx", &start_address, &end_address);
+            if (VA >= start_address && VA < end_address) {
+                break;
+            }
+        }
+
+        fclose(maps_file);
+
+        unsigned long long VPN = start_address / PAGE_SIZE;
+
+        // Open pagemap file
+        char pagemap_file_path[256];
+        snprintf(pagemap_file_path, sizeof(pagemap_file_path), "/proc/%lu/pagemap", PID);
+
+        int pagemap_file = open(pagemap_file_path, O_RDONLY);
+        if (pagemap_file < 0) {
+            perror("Cannot open pagemap file");
+            return 1;
+        }
+
+        unsigned long offset = VPN * ENTRY_SIZE;
+        // Read the entries from the pagemap file
+        uint64_t entry;
+        lseek(pagemap_file, offset, SEEK_CUR);
+        read(pagemap_file, &entry, ENTRY_SIZE);
+
+        unsigned long long PFN = entry & 0x7FFFFFFFFFFFFF;
+
+        unsigned long long physical_address = (PFN * PAGE_SIZE) + (VA % PAGE_SIZE);  
+
+        printf("\nPA: 0x%016llx\n", physical_address);
+        printf("\nPFN: 0x%09llx\n", PFN);
+
+        return 0;
     }
 	else if (strcmp(command, "-pte") == 0)
 	{
