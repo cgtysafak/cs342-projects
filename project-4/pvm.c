@@ -569,9 +569,9 @@ int main(int argc, char *argv[])
             return 1;
         }
 
-		int level2[512];
-		int level3[512];
-		int level4[512];
+        static int level2[512] = {0};
+        static int level3[512][512] = {{0}};
+        static int level4[512][512][512] = {{{0}}};
 
         char line[256];
         while (fgets(line, sizeof(line), file) != NULL) {
@@ -592,33 +592,35 @@ int main(int argc, char *argv[])
 				unsigned long level2identifier = (vpn >> (9*3)) & 0x1FF;
 				unsigned long level3identifier = (vpn >> (9*2)) & 0x1FF;
 				unsigned long level4identifier = (vpn >> (9*1)) & 0x1FF;
+                
+                if (level2identifier > 512 || level3identifier > 512 || level4identifier > 512) {
+                    printf("error detected");
+                }
 
 				level2[level2identifier] = 1;
-				level3[level3identifier] = 1;
-				level4[level4identifier] = 1;
+				level3[level2identifier][level3identifier] = 1;
+				level4[level2identifier][level3identifier][level4identifier] = 1;
             }
 		}
 
 		int level1count = 1;
-
 		int level2count = 0;
+        int level3count = 0;
+        int level4count = 0;
+
 		for (int i = 0; i < 512; i++) {
             if (level2[i] == 1) {
                 ++level2count;
-            }
-		}
-
-		int level3count = 0;
-		for (int i = 0; i < 512; i++) {
-			if (level3[i] == 1) {
-                ++level3count;
-            }
-		}
-
-		int level4count = 0;
-		for (int i = 0; i < 512; i++) {
-			if (level4[i] == 1) {
-                ++level4count;
+                for (int j = 0; j < 512; j++) {
+                    if (level3[i][j] == 1) {
+                        ++level3count;
+                        for (int k = 0; k < 512; k++) {
+                            if (level4[i][j][k] == 1) {
+                                ++level4count;
+                            }
+                        }
+                    }
+                }
             }
 		}
 
