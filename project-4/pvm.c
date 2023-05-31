@@ -15,6 +15,9 @@
 
 #define PFN_MASK ((1ULL << 55) - 1)
 #define PAGE_SIZE 4096
+#define ENTRY_SIZE 8 // 64 bits
+#define LEVEL_OFFSET_BITS 9
+#define LEVEL_ENTRIES (1ULL << LEVEL_OFFSET_BITS) //1000000000 - 1 = 0111111111
 
 int main(int argc, char *argv[])
 {
@@ -184,12 +187,105 @@ int main(int argc, char *argv[])
         }
         
         unsigned long PID = strtoul(argv[2], NULL, 0);
-        unsigned long VA = strtoul(argv[3], NULL, 0);
+        unsigned long long VA = strtoul(argv[3], NULL, 0);
         
         // Handle -mapva command with PID
-        printf("Command: -mapva\nPID: %lu\nVA: %lu\n", PID, VA);
+        printf("Command: -mapva\nPID: %lu\nVA: %llu\n", PID, VA);
 		
-        // TODO
+        // Open the maps file
+        char maps_file_path[256];
+        snprintf(maps_file_path, sizeof(maps_file_path), "/proc/%lu/maps", PID);
+
+        FILE *maps_file = fopen(maps_file_path, "r");
+        if (maps_file == NULL) {
+            perror("Cannot open maps file");
+            return 1;
+        }
+
+         // Find the virtual memory region [start_address, end_address) containing the virtual address (VA)
+        unsigned long long start_address, end_address;
+        while (fscanf(maps_file, "%llx-%llx", &start_address, &end_address) == 2) {
+            if (VA >= start_address && VA < end_address) {
+                break;
+            }
+        }
+
+        printf("%llu %llu", start_address, end_address);
+
+        fclose(maps_file);
+
+        unsigned long long offset = VA - start_address;
+        unsigned long long VPN = offset / PAGE_SIZE;
+
+        // Open pagemap file
+        char pagemap_file_path[256];
+        snprintf(pagemap_file_path, sizeof(pagemap_file_path), "/proc/%lu/pagemap", PID);
+
+        int pagemap_file = open(pagemap_file_path, O_RDONLY);
+        if (pagemap_file < 0) {
+            perror("Cannot open pagemap file");
+            return 1;
+        }
+
+        // Find indices for each level of the page table
+        unsigned long long level1_index = (VPN >> (3 * LEVEL_OFFSET_BITS)) & (LEVEL_ENTRIES - 1);
+        unsigned long long level2_index = (VPN >> (2 * LEVEL_OFFSET_BITS)) & (LEVEL_ENTRIES - 1);
+        unsigned long long level3_index = (VPN >> LEVEL_OFFSET_BITS) & (LEVEL_ENTRIES - 1);
+        unsigned long long level4_index = VPN & (LEVEL_ENTRIES - 1);
+
+        // Calculate the positions in the pagemap file for each level of the page table
+        off_t level1_position = level1_index * ENTRY_SIZE;
+        off_t level2_position = level1_position + (level2_index * ENTRY_SIZE);
+        off_t level3_position = level2_position + (level3_index * ENTRY_SIZE);
+        off_t level4_position = level3_position + (level4_index * ENTRY_SIZE);
+
+        // Read the entries from the pagemap file
+        uint64_t entry;
+        if (lseek(pagemap_file, level1_position, SEEK_SET) < 0 ||
+            read(pagemap_file, &entry, ENTRY_SIZE) != ENTRY_SIZE ||
+            !(entry & 0x01)) {
+            perror("Error reading pagemap entry level 1");
+            close(pagemap_file);
+            return 1;
+        }
+
+        if (lseek(pagemap_file, level2_position, SEEK_SET) < 0 ||
+            read(pagemap_file, &entry, ENTRY_SIZE) != ENTRY_SIZE ||
+            !(entry & 0x01)) {
+            perror("Error reading pagemap entry level 2");
+            close(pagemap_file);
+            return 1;
+        }
+
+        if (lseek(pagemap_file, level3_position, SEEK_SET) < 0 ||
+            read(pagemap_file, &entry, ENTRY_SIZE) != ENTRY_SIZE ||
+            !(entry & 0x01)) {
+            perror("Error reading pagemap entry level 3");
+            close(pagemap_file);
+            return 1;
+        }
+
+        if (lseek(pagemap_file, level4_position, SEEK_SET) < 0 ||
+            read(pagemap_file, &entry, ENTRY_SIZE) != ENTRY_SIZE ||
+            !(entry & 0x01)) {
+            perror("Error reading pagemap entry level 4");
+            close(pagemap_file);
+            return 1;
+        }
+
+        close(pagemap_file);
+
+        // Extract the physical frame number from the entry
+        unsigned long long PFN = entry & ((1ULL << 54) - 1);
+
+        // Convert the physical frame number to hexadecimal format
+        char physical_address[17];
+        snprintf(physical_address, sizeof(physical_address), "0x%012llx", PFN);
+
+        // Print the physical address
+        printf("%s\n", physical_address);
+
+        return 0;
     }
 	else if (strcmp(command, "-pte") == 0)
 	{
