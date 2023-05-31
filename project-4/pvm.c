@@ -250,8 +250,8 @@ int main(int argc, char *argv[])
 
         return 0;
     }
-	else if (strcmp(command, "-pte") == 0)
-	{
+    else if (strcmp(command, "-pte") == 0)
+    {
         if (argc != 4) {
             printf("Usage: %s -pte <PID> <VA>\n", argv[0]);
             return 1;
@@ -259,11 +259,59 @@ int main(int argc, char *argv[])
         
         unsigned long PID = strtoul(argv[2], NULL, 0);
         unsigned long VA = strtoul(argv[3], NULL, 0);
-        
-        // Handle -pte command with PID
-        printf("Command: -pte\nPID: %lu\nVA: %lu\n", PID, VA);
-		
-        // TODO
+
+        // read the maps file
+        char filePath[256];
+        snprintf(filePath, sizeof(filePath), "/proc/%lu/maps", PID);
+        FILE *file = fopen(filePath, "r");
+
+        // maps check
+        if(file == NULL) {
+            printf("No such file %s\n", filePath);
+            return 1;
+        }
+        char line[256];
+
+        while (fgets(line, sizeof(line), file) != NULL)
+        {
+            unsigned long startAddress, endAddress, entry, offset;
+
+            // Extract start and end addresses from the line
+            sscanf(line, "%lx-%lx", &startAddress, &endAddress);
+
+            if(VA >= startAddress && VA <= endAddress)
+            {
+                unsigned long VPN = VA / 4096;
+
+                char pagemapPath[256];
+                snprintf(pagemapPath, sizeof(pagemapPath), "/proc/%lu/pagemap", PID);
+                
+                int fd = open(pagemapPath, O_RDONLY);
+                if(fd == -1 ) {
+                    perror("Error opening pagemap");
+                    return 1;
+                }
+   
+                offset = sizeof(unsigned long) * (VPN);
+                lseek(fd, offset, SEEK_SET);
+                read(fd, &entry, sizeof(unsigned long));
+
+                unsigned long mask_PFN = (1UL << 55)-1;
+                unsigned long PFN = entry & mask_PFN;
+                unsigned long present_bit = (entry >> 63) & 1;
+                unsigned long swapped_bit = (entry >> 62) & 1;
+                unsigned long file_page_bit = (entry >> 61) & 1;
+                unsigned long soft_dirty_bit = (entry >> 55) & 1;
+                
+                printf("Command: -pte VA: 0x%016lX\tVPN: 0x%016lX\t", VA, VPN);
+                printf("Present bit: %lu\t Swapped bit: %lu\t Filepage bit: %lu\t Softdirty bit: %lu\n", present_bit, swapped_bit, file_page_bit, soft_dirty_bit);
+                printf("PFN: 0x%016lX\n", PFN);
+
+                return 0;      
+            }    
+
+        }    
+
     }
 	else if (strcmp(command, "-maprange") == 0)
 	{
