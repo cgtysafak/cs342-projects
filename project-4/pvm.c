@@ -374,10 +374,10 @@ int main(int argc, char *argv[])
                 close(pagemap);
 
                 if (in_memory) {
-                    printf("VPN = %lu PFN = %lu\n", vpn, pfn);
+                    printf("VPN = %lx PFN = %lx\n", vpn, pfn);
                 }
                 else {
-                    printf("VPN = %lu not-in-memory\n", vpn);
+                    printf("VPN = %lx not-in-memory\n", vpn);
                 }
             }
         }
@@ -396,7 +396,59 @@ int main(int argc, char *argv[])
         // Handle -mapallin command with PID
         printf("Command: -mapallin\nPID: %lu\n", PID);
 		
-        // TODO
+        char file_path[256];
+        snprintf(file_path, sizeof(file_path), "/proc/%lu/maps", PID);
+        FILE* file = fopen(file_path, "r");
+
+        if (file == NULL) {
+            printf("ERROR: File could not be opened. Path: %s\n", file_path);
+            return 1;
+        }
+
+        char line[256];
+        while (fgets(line, sizeof(line), file) != NULL) {
+            unsigned long start_address, end_address, vpn, pfn;
+            bool in_memory = false;
+
+            // Extract start and end addresses from the line
+            sscanf(line, "%lx-%lx", &start_address, &end_address);
+
+            // Calculate the VPN range
+            unsigned long vpn_start = start_address / PAGE_SIZE;
+            unsigned long vpn_end = end_address / PAGE_SIZE;
+
+            for (vpn = vpn_start; vpn <= vpn_end; vpn++) {
+                char pagemap_path[256];
+                snprintf(pagemap_path, sizeof(pagemap_path), "/proc/%lu/pagemap", PID);
+
+                int pagemap = open(pagemap_path, O_RDONLY);
+                if (pagemap == -1) {
+                    perror("ERROR: Could not open pagemap");
+                    return 1;
+                }
+
+                unsigned long offset_pagemap = sizeof(unsigned long) * vpn;
+                lseek(pagemap, offset_pagemap, SEEK_SET);
+                if (read(pagemap, &pfn, sizeof(unsigned long)) != sizeof(unsigned long)) {
+                    perror("ERROR: Failed to read pagemap");
+                    return 1;
+                }
+
+                unsigned long present_bit = (pfn >> 63) & 1;
+                if (present_bit) {
+                    in_memory = true;
+                    pfn &= ((1UL << 55) - 1);
+                }
+                else {
+                    continue;
+                }
+
+                close(pagemap);
+                printf("mapping: vpn=0x%lx pfn=0x%lx\n", vpn, pfn);
+            }
+        }
+
+        fclose(file);
     }
 	else if (strcmp(command, "-alltablesize") == 0)
 	{
