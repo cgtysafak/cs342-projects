@@ -269,3 +269,291 @@ int main(int argc, char *argv[])
     
     return 0;
 }
+
+/*
+#include <stdio.h>
+#include <stdlib.h>
+#include <stdint.h>
+#include <unistd.h>
+#include <fcntl.h>
+#include <sys/types.h>
+#include <sys/stat.h>
+
+#define PAGE_SIZE 4096
+#define PAGE_SHIFT 12
+
+// Function to read the content of a binary file
+void read_binary_file(const char *filename, void *buffer, size_t size) {
+    int fd = open(filename, O_RDONLY);
+    if (fd < 0) {
+        perror("Error opening file");
+        exit(1);
+    }
+
+    ssize_t num_read = read(fd, buffer, size);
+    if (num_read < 0) {
+        perror("Error reading file");
+        exit(1);
+    }
+
+    close(fd);
+}
+
+// Function to calculate the physical address from the virtual address
+uintptr_t calculate_physical_address(pid_t pid, uintptr_t virtual_address) {
+    char pagemap_file[64];
+    uintptr_t page_frame_number;
+    off_t offset;
+
+    sprintf(pagemap_file, "/proc/%d/pagemap", pid);
+    int fd = open(pagemap_file, O_RDONLY);
+    if (fd < 0) {
+        perror("Error opening pagemap file");
+        exit(1);
+    }
+
+    offset = (virtual_address / PAGE_SIZE) * sizeof(uint64_t);
+    if (lseek(fd, offset, SEEK_SET) == -1) {
+        perror("Error seeking to pagemap entry");
+        exit(1);
+    }
+
+    uint64_t pagemap_entry;
+    if (read(fd, &pagemap_entry, sizeof(uint64_t)) != sizeof(uint64_t)) {
+        perror("Error reading pagemap entry");
+        exit(1);
+    }
+
+    page_frame_number = pagemap_entry & 0x7FFFFFFFFFFFFF;
+    close(fd);
+
+    return (page_frame_number * PAGE_SIZE) + (virtual_address % PAGE_SIZE);
+}
+
+// Function to print the (page number, frame number) mappings for all used pages
+void print_page_frame_mappings(pid_t pid, int in_memory_only) {
+    char maps_file[64];
+    char pagemap_file[64];
+
+    sprintf(maps_file, "/proc/%d/maps", pid);
+    sprintf(pagemap_file, "/proc/%d/pagemap", pid);
+
+    FILE *maps_fp = fopen(maps_file, "r");
+    if (maps_fp == NULL) {
+        perror("Error opening maps file");
+        exit(1);
+    }
+
+    int pagemap_fd = open(pagemap_file, O_RDONLY);
+    if (pagemap_fd < 0) {
+        perror("Error opening pagemap file");
+        exit(1);
+    }
+
+    uintptr_t start_addr, end_addr;
+    unsigned long long offset;
+    char permissions[5];
+    int dev_major, dev_minor, inode;
+    char pathname[256];
+
+    while (fscanf(maps_fp, "%lx-%lx %s %llx %x:%x %d",
+                  &start_addr, &end_addr, permissions, &offset,
+                  &dev_major, &dev_minor, &inode) != EOF) {
+        if (fgets(pathname, sizeof(pathname), maps_fp) == NULL) {
+            perror("Error reading pathname from maps file");
+            exit(1);
+        }
+
+        // Remove newline character from the end of the pathname
+        size_t len = strlen(pathname);
+        if (len > 0 && pathname[len - 1] == '\n') {
+            pathname[len - 1] = '\0';
+        }
+
+        printf("Mapping: %lx-%lx %s\n", start_addr, end_addr, pathname);
+
+        uintptr_t virtual_address = start_addr;
+        while (virtual_address < end_addr) {
+            off_t offset = (virtual_address / PAGE_SIZE) * sizeof(uint64_t);
+            if (lseek(pagemap_fd, offset, SEEK_SET) == -1) {
+                perror("Error seeking to pagemap entry");
+                exit(1);
+            }
+
+            uint64_t pagemap_entry;
+            if (read(pagemap_fd, &pagemap_entry, sizeof(uint64_t)) != sizeof(uint64_t)) {
+                perror("Error reading pagemap entry");
+                exit(1);
+            }
+
+            if (!in_memory_only || (pagemap_entry >> 63) & 1) {
+                uintptr_t page_frame_number = pagemap_entry & 0x7FFFFFFFFFFFFF;
+                printf("Virtual Address: %lx -> Physical Address: %lx\n", virtual_address,
+                       (page_frame_number * PAGE_SIZE) + (virtual_address % PAGE_SIZE));
+            }
+
+            virtual_address += PAGE_SIZE;
+        }
+    }
+
+    fclose(maps_fp);
+    close(pagemap_fd);
+}
+
+int main(int argc, char *argv[]) {
+    pid_t pid = getpid();
+
+    printf("Page-Frame Mappings for Used Pages:\n");
+    print_page_frame_mappings(pid, 0);
+
+    printf("\nPage-Frame Mappings for Used Pages in Memory:\n");
+    print_page_frame_mappings(pid, 1);
+
+    return 0;
+}
+
+------------------------------------------------------------------------------------------------------
+
+#include <stdio.h>
+#include <stdlib.h>
+#include <stdint.h>
+#include <unistd.h>
+#include <fcntl.h>
+#include <sys/types.h>
+#include <sys/stat.h>
+#include <string.h>
+
+#define PAGE_SIZE 4096
+#define PAGE_SHIFT 12
+
+// Function to read the content of a binary file
+void read_binary_file(const char *filename, void *buffer, size_t size) {
+    FILE *file = fopen(filename, "rb");
+    if (file == NULL) {
+        perror("Error opening file");
+        exit(1);
+    }
+
+    size_t num_read = fread(buffer, 1, size, file);
+    if (num_read != size) {
+        perror("Error reading file");
+        exit(1);
+    }
+
+    fclose(file);
+}
+
+// Function to calculate the physical address from the virtual address
+uintptr_t calculate_physical_address(pid_t pid, uintptr_t virtual_address) {
+    char pagemap_file[64];
+    uintptr_t page_frame_number;
+    off_t offset;
+
+    sprintf(pagemap_file, "/proc/%d/pagemap", pid);
+    int fd = open(pagemap_file, O_RDONLY);
+    if (fd < 0) {
+        perror("Error opening pagemap file");
+        exit(1);
+    }
+
+    offset = (virtual_address / PAGE_SIZE) * sizeof(uint64_t);
+    if (lseek(fd, offset, SEEK_SET) == -1) {
+        perror("Error seeking to pagemap entry");
+        exit(1);
+    }
+
+    uint64_t pagemap_entry;
+    if (read(fd, &pagemap_entry, sizeof(uint64_t)) != sizeof(uint64_t)) {
+        perror("Error reading pagemap entry");
+        exit(1);
+    }
+
+    page_frame_number = pagemap_entry & 0x7FFFFFFFFFFFFF;
+    close(fd);
+
+    return (page_frame_number * PAGE_SIZE) + (virtual_address % PAGE_SIZE);
+}
+
+// Function to check if a page is in memory
+int is_page_in_memory(pid_t pid, uintptr_t virtual_address) {
+    char pagemap_file[64];
+    off_t offset;
+
+    sprintf(pagemap_file, "/proc/%d/pagemap", pid);
+    int fd = open(pagemap_file, O_RDONLY);
+    if (fd < 0) {
+        perror("Error opening pagemap file");
+        exit(1);
+    }
+
+    offset = (virtual_address / PAGE_SIZE) * sizeof(uint64_t);
+    if (lseek(fd, offset, SEEK_SET) == -1) {
+        perror("Error seeking to pagemap entry");
+        exit(1);
+    }
+
+    uint64_t pagemap_entry;
+    if (read(fd, &pagemap_entry, sizeof(uint64_t)) != sizeof(uint64_t)) {
+        perror("Error reading pagemap entry");
+        exit(1);
+    }
+
+    close(fd);
+
+    return (pagemap_entry >> 63) & 1;
+}
+
+// Function to print the (page number, frame number) mappings for all used pages
+void print_page_frame_mappings(pid_t pid) {
+    char maps_file[64];
+    char pagemap_file[64];
+
+    sprintf(maps_file, "/proc/%d/maps", pid);
+    sprintf(pagemap_file, "/proc/%d/pagemap", pid);
+
+    FILE *maps_fp = fopen(maps_file, "r");
+    if (maps_fp == NULL) {
+        perror("Error opening maps file");
+        exit(1);
+    }
+
+    int pagemap_fd = open(pagemap_file, O_RDONLY);
+    if (pagemap_fd < 0) {
+        perror("Error opening pagemap file");
+        exit(1);
+    }
+
+    uintptr_t start_addr, end_addr;
+    char perms[5], pathname[1000];
+    int in_memory;
+
+    while (fscanf(maps_fp, "%lx-%lx %4s %*lx %*x:%*x %*d%*[ \t]%[^\n]", &start_addr, &end_addr, perms, pathname) != EOF) {
+        in_memory = is_page_in_memory(pid, start_addr);
+
+        if (strcmp(perms, "r--p") != 0 || !in_memory) {
+            printf("Virtual Address: %lx -> Not in memory\n", start_addr);
+        } else {
+            uintptr_t page_frame_number = calculate_physical_address(pid, start_addr) >> PAGE_SHIFT;
+            printf("Virtual Address: %lx -> Physical Page Frame Number: %lx\n", start_addr, page_frame_number);
+        }
+
+        if (pathname[strlen(pathname) - 1] == '\n') {
+            pathname[strlen(pathname) - 1] = '\0';
+        }
+
+        printf("Mapping: %lx-%lx %s\n", start_addr, end_addr, pathname);
+    }
+
+    fclose(maps_fp);
+    close(pagemap_fd);
+}
+
+int main() {
+    pid_t pid = getpid();
+
+    printf("Page-Frame Mappings for Used Pages:\n");
+    print_page_frame_mappings(pid);
+
+    return 0;
+}
+*/
