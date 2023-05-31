@@ -7,7 +7,6 @@
 #include <pthread.h>
 #include <math.h>
 #include <fcntl.h>
-
 #include <stdint.h>
 #include <unistd.h>
 #include <sys/types.h>
@@ -26,11 +25,8 @@ int main(int argc, char *argv[])
 	if (argc > 2)
 	{
         command = argv[1];
-        printf("Command: %s\n", command);
-        printf("argc: %d\n", argc);
 	}
 
-	printf("Start...\n");
 	if (strcmp(command, "-frameinfo") == 0)
 	{
             unsigned long PFN = strtoul(argv[2], NULL, 0);
@@ -38,7 +34,7 @@ int main(int argc, char *argv[])
 
             int fd = open("/proc/kpageflags", O_RDONLY);
 	    if(fd == -1 ) {
-	        perror("Error opening /proc/kpageflags");
+	        perror("ERROR: could not open: /proc/kpageflags");
 	        return 1;
 	    }
 	    
@@ -59,14 +55,14 @@ int main(int argc, char *argv[])
 
 	    if(lseek(fd, offset, SEEK_CUR) == -1)
 	    {
-	    	perror("Error seeking in /proc/pageflags");
+	    	perror("ERROR: could not seek: /proc/pageflags");
 	    	close(fd);
 	    	return 1;
 	    }
 
 	    if(read(fd, &entry, sizeof(uint64_t)) != sizeof(uint64_t)) 
 	    {
-	    	perror("Error reading /proc/pageflags");
+	    	perror("EERROR: could not read: /proc/pageflags");
 	    	close(fd);
 	    	return 1;
 	    }
@@ -113,8 +109,6 @@ int main(int argc, char *argv[])
 
         while (fgets(line, sizeof(line), file_ctrl) != NULL) {noOfLines++;}
 
-		printf("NO OF LINES = %d\n\n", noOfLines);
-
 		int ctrl = 0;
         while (fgets(line, sizeof(line), file) != NULL)
         {
@@ -141,13 +135,13 @@ int main(int argc, char *argv[])
             
             int pagemap = open(pagemapPath, O_RDONLY);
             if(pagemap == -1 ) {
-                perror("Error opening pagemap");
+                perror("ERROR: could not open: pagemap");
                 return 1;
             }
 
 			int kpagecount = open("/proc/kpagecount", O_RDONLY);
 			if(kpagecount == -1 ) {
-			    perror("Error opening /proc/kpagecount");
+			    perror("ERROR: could not open: /proc/kpagecount");
 			    return 1;
 			}
 
@@ -164,8 +158,6 @@ int main(int argc, char *argv[])
 				if (present_bit == 0)
 					continue;
 
-				// printf("VPN_start = %lu\tVPN_end = %lu\tEntry = %lu\tPFN = %lu\tpresent = %lu\n", VPN_start, VPN_end, entry_pagemap, PFN, present_bit);
-
 				offset_kpagecount = 8*PFN;
 
 				lseek(kpagecount, offset_kpagecount, SEEK_CUR);
@@ -176,8 +168,6 @@ int main(int argc, char *argv[])
 				if (entry_kpagecount >= 1 && present_bit != 0)
 					totalPhysUsage += 4096;
             }
-
-            // printf("%s\n", line);
         }
 
         printf("Total virtual memory usage: %lu KB\n", (totalMemoryUsage/1024));
@@ -197,15 +187,13 @@ int main(int argc, char *argv[])
         unsigned long VA = strtoul(argv[3], NULL, 0);
         
         // Handle -mapva command with PID
-        printf("Command: -mapva\nPID: %lu\nVA: %lu\n", PID, VA);
-
         // Open the maps file
         char maps_file_path[256];
         snprintf(maps_file_path, sizeof(maps_file_path), "/proc/%lu/maps", PID);
 
         FILE *maps_file = fopen(maps_file_path, "r");
         if (maps_file == NULL) {
-            perror("Cannot open maps file");
+            perror("ERROR: Cannot open maps file");
             return 1;
         }
 
@@ -213,7 +201,6 @@ int main(int argc, char *argv[])
 
         char line[256];
         while (fgets(line, sizeof(line), maps_file) != NULL) {
-            // printf("\n line %s", line);
             // Extract start and end addresses from the line
             sscanf(line, "%lx-%lx", &start_address, &end_address);
             if (VA >= start_address && VA < end_address) {
@@ -231,7 +218,7 @@ int main(int argc, char *argv[])
 
         int pagemap_file = open(pagemap_file_path, O_RDONLY);
         if (pagemap_file < 0) {
-            perror("Cannot open pagemap file");
+            perror("ERROR: Cannot open pagemap file");
             return 1;
         }
 
@@ -293,7 +280,7 @@ int main(int argc, char *argv[])
                 
                 int fd = open(pagemapPath, O_RDONLY);
                 if(fd == -1 ) {
-                    perror("Error opening pagemap");
+                    perror("ERROR: could not open: pagemap");
                     return 1;
                 }
    
@@ -308,7 +295,7 @@ int main(int argc, char *argv[])
                 unsigned long file_page_bit = (entry >> 61) & 1;
                 unsigned long soft_dirty_bit = (entry >> 55) & 1;
                 
-                printf("Command: -pte VA: 0x%016lX\tVPN: 0x%016lX\t", VA, VPN);
+                printf("VA: 0x%016lX\tVPN: 0x%016lX\t", VA, VPN);
                 printf("Present bit: %lu\t Swapped bit: %lu\t Filepage bit: %lu\t Softdirty bit: %lu\n", present_bit, swapped_bit, file_page_bit, soft_dirty_bit);
                 printf("PFN: 0x%016lX\n", PFN);
 
@@ -330,8 +317,6 @@ int main(int argc, char *argv[])
         unsigned long VA2 = strtoul(argv[4], NULL, 0);
         
         // Handle -maprange command with PID
-        printf("Command: -maprange\nPID: %lu\nVA1: %lu\nVA2: %lu\n", PID, VA1, VA2);
-
         // read the maps file
         char filePath[256];
         snprintf(filePath, sizeof(filePath), "/proc/%lu/maps", PID);
@@ -375,13 +360,13 @@ int main(int argc, char *argv[])
 
 		            int pagemap = open(pagemapPath, O_RDONLY);
 		            if(pagemap == -1 ) {
-		                perror("Error opening pagemap");
+		                perror("ERROR: could not open: pagemap");
 		                return 1;
 		            }
 
 					int kpagecount = open("/proc/kpagecount", O_RDONLY);
 					if(kpagecount == -1 ) {
-					    perror("Error opening /proc/kpagecount");
+					    perror("ERROR: could not open: /proc/kpagecount");
 					    return 1;
 					}
 
@@ -428,8 +413,6 @@ int main(int argc, char *argv[])
         unsigned long PID = strtoul(argv[2], NULL, 0);
         
         // Handle -mapall command with PID
-        printf("Command: -mapall\nPID: %lu\n", PID);
-
         char file_path[256];
         snprintf(file_path, sizeof(file_path), "/proc/%lu/maps", PID);
         FILE* file = fopen(file_path, "r");
@@ -499,8 +482,6 @@ int main(int argc, char *argv[])
         unsigned long PID = strtoul(argv[2], NULL, 0);
         
         // Handle -mapallin command with PID
-        printf("Command: -mapallin\nPID: %lu\n", PID);
-		
         char file_path[256];
         snprintf(file_path, sizeof(file_path), "/proc/%lu/maps", PID);
         FILE* file = fopen(file_path, "r");
@@ -563,8 +544,6 @@ int main(int argc, char *argv[])
         unsigned long PID = strtoul(argv[2], NULL, 0);
         
         // Handle -alltablesize command with PID
-        printf("Command: -alltablesize\nPID: %lu\n", PID);
-		
         char file_path[256];
         snprintf(file_path, sizeof(file_path), "/proc/%lu/maps", PID);
         FILE* file = fopen(file_path, "r");
@@ -599,7 +578,7 @@ int main(int argc, char *argv[])
 				unsigned long level4identifier = (vpn >> (9*1)) & 0x1FF;
                 
                 if (level2identifier > 512 || level3identifier > 512 || level4identifier > 512) {
-                    printf("error detected");
+                    printf("ERROR DETECTED");
                 }
 
 				level2[level2identifier] = 1;
@@ -637,8 +616,6 @@ int main(int argc, char *argv[])
 
         fclose(file);
     }
-
-    printf("Done!\n");
     
     return 0;
 }
